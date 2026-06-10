@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Activity,
+  Banknote,
   Building2,
   CreditCard,
   FileClock,
@@ -177,8 +178,8 @@ export default function AdminPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-slate-300">
-              Controle empresas, planos, assinaturas, cupons, bloqueios,
-              auditoria e eventos de pagamento da plataforma.
+              Controle empresas, planos, assinaturas, financeiro, cupons,
+              bloqueios, auditoria e eventos de pagamento da plataforma.
             </p>
           </div>
 
@@ -193,12 +194,19 @@ export default function AdminPage() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-7">
         <AdminLinkCard
           href="/admin/tenants"
           icon={Building2}
           title="Empresas"
           description="Crie estabelecimentos, altere status, suspenda ou bana clientes."
+        />
+
+        <AdminLinkCard
+          href="/admin/financeiro"
+          icon={Banknote}
+          title="Financeiro"
+          description="Veja MRR, ARR, receita por plano, inadimplência e pagamentos."
         />
 
         <AdminLinkCard

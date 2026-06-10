@@ -394,18 +394,20 @@ export default function VendasPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-sm">
+      <section className="rounded-[2rem] bg-slate-950 p-5 text-white shadow-sm sm:p-6">
         <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
           <div className="flex items-center gap-4">
             <div className="rounded-3xl bg-white p-4 text-slate-950">
               <ShoppingCart size={28} />
             </div>
 
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">
                 PDV
               </p>
-              <h1 className="text-3xl font-black">Vendas</h1>
+
+              <h1 className="text-2xl font-black sm:text-3xl">Vendas</h1>
+
               <p className="mt-1 text-sm text-slate-300">
                 Monte o carrinho manualmente ou lendo código de barras.
               </p>
@@ -483,18 +485,18 @@ export default function VendasPage() {
                   className="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-lg font-black text-slate-950">
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-black text-slate-950">
                         {product.name}
                       </p>
 
-                      <p className="mt-1 font-mono text-xs font-semibold text-slate-400">
+                      <p className="mt-1 truncate font-mono text-xs font-semibold text-slate-400">
                         {product.barcode || "Sem código"}
                       </p>
                     </div>
 
                     {inCart > 0 && (
-                      <span className="rounded-full bg-slate-950 px-3 py-1 text-xs font-black text-white">
+                      <span className="shrink-0 rounded-full bg-slate-950 px-3 py-1 text-xs font-black text-white">
                         {inCart}x
                       </span>
                     )}
@@ -505,6 +507,7 @@ export default function VendasPage() {
                       <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
                         Preço
                       </p>
+
                       <p className="text-2xl font-black text-slate-950">
                         {formatMoney(product.sale_price)}
                       </p>
@@ -514,6 +517,7 @@ export default function VendasPage() {
                       <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
                         Estoque
                       </p>
+
                       <p
                         className={
                           stock <= 0
@@ -539,7 +543,7 @@ export default function VendasPage() {
 
         <form
           onSubmit={handleCreateSale}
-          className="sticky top-28 h-fit rounded-[2rem] border border-slate-200 bg-white shadow-sm"
+          className="h-fit rounded-[2rem] border border-slate-200 bg-white shadow-sm xl:sticky xl:top-28"
         >
           <div className="border-b border-slate-100 p-6">
             <div className="flex items-center gap-3">
@@ -551,6 +555,7 @@ export default function VendasPage() {
                 <h2 className="text-2xl font-black text-slate-950">
                   Carrinho
                 </h2>
+
                 <p className="text-sm text-slate-500">
                   {cart.length} item(ns) na venda
                 </p>
@@ -565,10 +570,11 @@ export default function VendasPage() {
                 className="rounded-2xl border border-slate-100 bg-slate-50 p-4"
               >
                 <div className="flex items-start justify-between gap-4">
-                  <div>
+                  <div className="min-w-0">
                     <p className="font-black text-slate-950">
                       {item.product.name}
                     </p>
+
                     <p className="mt-1 text-sm font-bold text-slate-500">
                       {formatMoney(item.product.sale_price)} un.
                     </p>
@@ -670,6 +676,7 @@ export default function VendasPage() {
             <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
               <TotalRow label="Subtotal" value={formatMoney(subtotal)} />
               <TotalRow label="Desconto" value={formatMoney(discountNumber)} />
+
               <div className="border-t border-slate-200 pt-2">
                 <TotalRow label="Total" value={formatMoney(total)} strong />
               </div>
@@ -703,6 +710,7 @@ export default function VendasPage() {
           <h2 className="text-xl font-black text-slate-950">
             Vendas recentes
           </h2>
+
           <p className="mt-1 text-sm text-slate-500">
             Últimas vendas finalizadas.
           </p>
@@ -776,6 +784,7 @@ export default function VendasPage() {
                   <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
                     Scanner de venda
                   </p>
+
                   <h2 className="text-2xl font-black text-slate-950">
                     Ler produto
                   </h2>
@@ -792,7 +801,7 @@ export default function VendasPage() {
               <div className="bg-black p-3">
                 <div
                   id={SCANNER_ELEMENT_ID}
-                  className="min-h-[320px] overflow-hidden rounded-[1.5rem] bg-slate-950"
+                  className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[320px]"
                 />
               </div>
 

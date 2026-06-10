@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { Html5Qrcode } from "html5-qrcode";
 import { apiFetch } from "@/lib/api";
 import { getCurrentTenant } from "@/lib/tenant";
+import { formatMoney } from "@/lib/utils";
 
 type Product = {
   id: string;
@@ -107,7 +108,7 @@ export default function ScannerPage() {
           await handleBarcodeDetected(decodedText);
         },
         () => {
-          // ignora falhas comuns durante frames sem código
+          // frames sem código são normais
         }
       );
     } catch (err) {
@@ -120,13 +121,16 @@ export default function ScannerPage() {
     }
   }
 
-  function resetScanner() {
+  async function resetScanner() {
+    await stopScanner();
+
     setBarcode("");
     setProduct(null);
     setMessage("");
     setError("");
     lastScannedRef.current = null;
-    startScanner();
+
+    await startScanner();
   }
 
   function goToProduct() {
@@ -149,17 +153,21 @@ export default function ScannerPage() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-sm">
+      <section className="rounded-[2rem] bg-slate-950 p-5 text-white shadow-sm sm:p-6">
         <div className="flex items-center gap-4">
           <div className="rounded-3xl bg-white p-4 text-slate-950">
             <Barcode size={28} />
           </div>
 
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">
               Scanner
             </p>
-            <h1 className="text-3xl font-black">Ler código de barras</h1>
+
+            <h1 className="text-2xl font-black sm:text-3xl">
+              Ler código de barras
+            </h1>
+
             <p className="mt-1 text-sm text-slate-300">
               Aponte a câmera para o código do produto.
             </p>
@@ -171,7 +179,7 @@ export default function ScannerPage() {
         <div className="bg-black p-3">
           <div
             id={SCANNER_ELEMENT_ID}
-            className="min-h-[300px] overflow-hidden rounded-[1.5rem] bg-slate-950"
+            className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[300px]"
           />
         </div>
 
@@ -201,7 +209,8 @@ export default function ScannerPage() {
               <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
                 Código lido
               </p>
-              <p className="mt-1 font-mono text-lg font-black text-slate-950">
+
+              <p className="mt-1 break-all font-mono text-lg font-black text-slate-950">
                 {barcode}
               </p>
             </div>
@@ -229,8 +238,12 @@ export default function ScannerPage() {
                 {product.name}
               </h2>
 
+              <p className="mt-1 font-mono text-xs font-semibold text-slate-400">
+                {product.barcode || "Sem código"}
+              </p>
+
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                <Info label="Preço" value={`R$ ${product.sale_price}`} />
+                <Info label="Preço" value={formatMoney(product.sale_price)} />
                 <Info label="Estoque" value={product.current_stock} />
                 <Info label="Mínimo" value={product.min_stock} />
               </div>
@@ -266,6 +279,7 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
         {label}
       </p>
+
       <p className="mt-1 text-lg font-black text-slate-950">{value}</p>
     </div>
   );

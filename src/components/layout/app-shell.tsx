@@ -30,6 +30,7 @@ import { clearCachedTenant, getCurrentTenant, Tenant } from "@/lib/tenant";
 import { clearSubscriptionCache } from "@/lib/subscription";
 import { cn } from "@/lib/utils";
 import { AuthGuard } from "@/components/auth/auth-guard";
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav";
 
 const baseNavItems = [
   {
@@ -280,14 +281,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         {sidebarOpen && (
-          <div className="fixed inset-0 z-40 xl:hidden">
+          <div className="fixed inset-0 z-50 xl:hidden">
             <button
               aria-label="Fechar menu"
               onClick={() => setSidebarOpen(false)}
               className="absolute inset-0 bg-slate-950/40"
             />
 
-            <aside className="absolute inset-y-0 left-0 w-[86%] max-w-80 bg-white p-5 shadow-2xl">
+            <aside className="absolute inset-y-0 left-0 w-[88%] max-w-80 overflow-y-auto bg-white p-5 pb-[calc(env(safe-area-inset-bottom)+1rem)] shadow-2xl">
               <div className="mb-4 flex justify-end">
                 <button
                   onClick={() => setSidebarOpen(false)}
@@ -303,7 +304,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         )}
 
         <div className="xl:pl-80">
-          <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/85 px-4 py-4 shadow-sm backdrop-blur-xl lg:px-8">
+          <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:px-8 lg:py-4">
             <div className="flex items-center justify-between gap-4">
               <div className="flex min-w-0 items-center gap-3">
                 <button
@@ -314,14 +315,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </button>
 
                 <div className="min-w-0">
-                  <p className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400 sm:text-xs">
                     {isAdminArea ? "Admin LimaStock" : "LimaStock V1"}
                   </p>
 
-                  <h2 className="truncate text-xl font-bold text-slate-950">
+                  <h2 className="truncate text-base font-black text-slate-950 sm:text-xl">
                     {isAdminArea
                       ? "Gerenciamento da plataforma"
-                      : tenant?.name || "Controle inteligente de estoque"}
+                      : tenant?.name || "Controle de estoque"}
                   </h2>
                 </div>
               </div>
@@ -346,8 +347,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </header>
 
-          <main className="p-4 lg:p-8">{children}</main>
+          <main className="px-4 pb-28 pt-4 lg:px-8 lg:pb-8 lg:pt-8">
+            {children}
+          </main>
         </div>
+
+        <MobileBottomNav />
       </div>
     </AuthGuard>
   );
