@@ -6,14 +6,17 @@ import {
   Camera,
   Keyboard,
   PackagePlus,
-  RotateCcw,
   Save,
   Search,
   X,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import {
+  normalizeBarcodeInput,
+  startBarcodeScanner,
+  type BarcodeScannerController,
+} from "@/lib/barcode-scanner";
 import { apiFetch } from "@/lib/api";
 import { getCurrentTenant } from "@/lib/tenant";
 
@@ -33,22 +36,8 @@ type Product = {
 
 const SCANNER_ELEMENT_ID = "limastock-create-product-scanner";
 
-const barcodeFormats = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.CODABAR,
-];
-
 function onlyBarcodeChars(value: string) {
-  return value
-    .trim()
-    .replace(/\s+/g, "")
-    .replace(/[^\dA-Za-z\-_.]/g, "");
+  return normalizeBarcodeInput(value);
 }
 
 function normalizeMoney(value: string) {
@@ -77,7 +66,7 @@ function NovoProdutoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerRef = useRef<BarcodeScannerController | null>(null);
   const barcodeInputRef = useRef<HTMLInputElement | null>(null);
   const processingRef = useRef(false);
 
@@ -106,11 +95,7 @@ function NovoProdutoContent() {
 
   async function stopScanner() {
     try {
-      if (scannerRef.current?.isScanning) {
-        await scannerRef.current.stop();
-      }
-
-      await scannerRef.current?.clear();
+      await scannerRef.current?.stop();
     } catch {
       // ignora erro ao parar câmera
     } finally {
@@ -165,33 +150,17 @@ function NovoProdutoContent() {
   async function startScanner() {
     try {
       setError("");
-      setScannerMessage("Aponte a câmera para o código de barras.");
+      setScannerMessage("Abrindo câmera...");
       processingRef.current = false;
 
       await stopScanner();
 
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
-        formatsToSupport: barcodeFormats,
-        verbose: false,
-      });
-
-      scannerRef.current = scanner;
       setScannerStarted(true);
 
-      await scanner.start(
-        {
-          facingMode: "environment",
-        },
-        {
-          fps: 20,
-          qrbox: {
-            width: 340,
-            height: 160,
-          },
-          aspectRatio: 1.7777778,
-          disableFlip: false,
-        },
-        async (decodedText) => {
+      scannerRef.current = await startBarcodeScanner({
+        elementId: SCANNER_ELEMENT_ID,
+        onStatus: setScannerMessage,
+        onDetected: async (decodedText) => {
           if (processingRef.current) return;
 
           const cleanCode = onlyBarcodeChars(decodedText);
@@ -209,12 +178,9 @@ function NovoProdutoContent() {
           window.setTimeout(() => {
             setScannerOpen(false);
             processingRef.current = false;
-          }, 700);
+          }, 500);
         },
-        () => {
-          // frames sem leitura são normais
-        }
-      );
+      });
     } catch (err) {
       setScannerStarted(false);
       setScannerMessage("");
@@ -229,10 +195,7 @@ function NovoProdutoContent() {
 
   async function openScanner() {
     setScannerOpen(true);
-
-    window.setTimeout(() => {
-      startScanner();
-    }, 500);
+    setScannerMessage("Toque em iniciar câmera para liberar o acesso no celular.");
   }
 
   async function closeScanner() {
@@ -575,8 +538,10 @@ function NovoProdutoContent() {
             <div className="flex-1 bg-black p-3">
               <div
                 id={SCANNER_ELEMENT_ID}
-                className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950"
-              />
+                className="flex min-h-[360px] items-center justify-center overflow-hidden rounded-[1.5rem] bg-slate-950 text-center text-sm font-bold text-slate-400"
+              >
+                Toque em “Iniciar câmera” para começar.
+              </div>
             </div>
 
             <div className="space-y-3 p-5">
@@ -592,8 +557,8 @@ function NovoProdutoContent() {
                   onClick={startScanner}
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
                 >
-                  <RotateCcw size={18} />
-                  Tentar novamente
+                  <Camera size={18} />
+                  Iniciar câmera
                 </button>
               )}
 

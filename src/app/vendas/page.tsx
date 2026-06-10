@@ -8,13 +8,16 @@ import {
   Minus,
   Plus,
   Receipt,
-  RotateCcw,
   Search,
   ShoppingCart,
   Trash2,
   X,
 } from "lucide-react";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
+import {
+  normalizeBarcodeInput,
+  startBarcodeScanner,
+  type BarcodeScannerController,
+} from "@/lib/barcode-scanner";
 import { apiFetch } from "@/lib/api";
 import { getCurrentTenant } from "@/lib/tenant";
 import { formatMoney } from "@/lib/utils";
@@ -58,17 +61,6 @@ type CartItem = {
 
 const SCANNER_ELEMENT_ID = "limastock-sale-scanner";
 
-const barcodeFormats = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.CODABAR,
-];
-
 const paymentOptions = [
   {
     label: "Pix",
@@ -92,7 +84,7 @@ let cachedProducts: Product[] | null = null;
 let cachedRecentSales: Sale[] | null = null;
 
 export default function VendasPage() {
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerRef = useRef<BarcodeScannerController | null>(null);
   const lastScannedRef = useRef<string | null>(null);
   const processingScanRef = useRef(false);
 
@@ -303,7 +295,7 @@ export default function VendasPage() {
   }
 
   async function findProductByBarcode(code: string) {
-    const cleanCode = code.trim();
+    const cleanCode = normalizeBarcodeInput(code);
 
     if (!cleanCode) return;
 
@@ -336,11 +328,7 @@ export default function VendasPage() {
 
   async function stopScanner() {
     try {
-      if (scannerRef.current?.isScanning) {
-        await scannerRef.current.stop();
-      }
-
-      await scannerRef.current?.clear();
+      await scannerRef.current?.stop();
     } catch {
       // ignora erro ao parar câmera
     } finally {
@@ -353,36 +341,19 @@ export default function VendasPage() {
     try {
       setError("");
       setSuccess("");
-      setScannerMessage("Aponte para o código de barras.");
+      setScannerMessage("Abrindo câmera...");
       lastScannedRef.current = null;
       processingScanRef.current = false;
 
       await stopScanner();
 
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
-        formatsToSupport: barcodeFormats,
-        verbose: false,
-      });
-
-      scannerRef.current = scanner;
-
       setScannerStarted(true);
 
-      await scanner.start(
-        {
-          facingMode: "environment",
-        },
-        {
-          fps: 15,
-          qrbox: {
-            width: 320,
-            height: 180,
-          },
-          aspectRatio: 1.7777778,
-          disableFlip: false,
-        },
-        async (decodedText) => {
-          const cleanCode = decodedText.trim();
+      scannerRef.current = await startBarcodeScanner({
+        elementId: SCANNER_ELEMENT_ID,
+        onStatus: setScannerMessage,
+        onDetected: async (decodedText) => {
+          const cleanCode = normalizeBarcodeInput(decodedText);
 
           if (!cleanCode) return;
           if (processingScanRef.current) return;
@@ -396,10 +367,7 @@ export default function VendasPage() {
 
           processingScanRef.current = false;
         },
-        () => {
-          // frames sem código são normais
-        }
-      );
+      });
     } catch (err) {
       setScannerStarted(false);
       setError(
@@ -412,10 +380,7 @@ export default function VendasPage() {
 
   async function openScanner() {
     setScannerOpen(true);
-
-    window.setTimeout(() => {
-      startScanner();
-    }, 400);
+    setScannerMessage("Toque em iniciar câmera para liberar o acesso no celular.");
   }
 
   async function closeScanner() {
@@ -887,8 +852,10 @@ export default function VendasPage() {
               <div className="bg-black p-3">
                 <div
                   id={SCANNER_ELEMENT_ID}
-                  className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[320px]"
-                />
+                  className="flex min-h-[360px] items-center justify-center overflow-hidden rounded-[1.5rem] bg-slate-950 text-center text-sm font-bold text-slate-400 sm:min-h-[320px]"
+                >
+                  Toque em “Iniciar câmera” para começar.
+                </div>
               </div>
 
               <div className="space-y-3 p-5">
@@ -904,8 +871,8 @@ export default function VendasPage() {
                     onClick={startScanner}
                     className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
                   >
-                    <RotateCcw size={18} />
-                    Tentar novamente
+                    <Camera size={18} />
+                    Iniciar câmera
                   </button>
                 )}
 

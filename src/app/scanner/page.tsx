@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Barcode, Camera, Package, Plus, RotateCcw } from "lucide-react";
+import { Barcode, Camera, Keyboard, Package, Plus, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { apiFetch } from "@/lib/api";
+import {
+  normalizeBarcodeInput,
+  startBarcodeScanner,
+  type BarcodeScannerController,
+} from "@/lib/barcode-scanner";
 import { getCurrentTenant } from "@/lib/tenant";
 import { formatMoney } from "@/lib/utils";
 
@@ -21,27 +25,17 @@ type Product = {
 
 const SCANNER_ELEMENT_ID = "limastock-barcode-scanner";
 
-const barcodeFormats = [
-  Html5QrcodeSupportedFormats.EAN_13,
-  Html5QrcodeSupportedFormats.EAN_8,
-  Html5QrcodeSupportedFormats.UPC_A,
-  Html5QrcodeSupportedFormats.UPC_E,
-  Html5QrcodeSupportedFormats.CODE_128,
-  Html5QrcodeSupportedFormats.CODE_39,
-  Html5QrcodeSupportedFormats.ITF,
-  Html5QrcodeSupportedFormats.CODABAR,
-];
-
 export default function ScannerPage() {
   const router = useRouter();
 
-  const scannerRef = useRef<Html5Qrcode | null>(null);
+  const scannerRef = useRef<BarcodeScannerController | null>(null);
   const lastScannedRef = useRef<string | null>(null);
   const processingRef = useRef(false);
 
   const [started, setStarted] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [barcode, setBarcode] = useState("");
+  const [manualBarcode, setManualBarcode] = useState("");
   const [product, setProduct] = useState<Product | null>(null);
 
   const [message, setMessage] = useState("");
@@ -49,13 +43,9 @@ export default function ScannerPage() {
 
   async function stopScanner() {
     try {
-      if (scannerRef.current?.isScanning) {
-        await scannerRef.current.stop();
-      }
-
-      await scannerRef.current?.clear();
+      await scannerRef.current?.stop();
     } catch {
-      // ignora erro ao parar câmera
+      // Ignora erro ao parar câmera.
     } finally {
       scannerRef.current = null;
       setScanning(false);
@@ -63,18 +53,17 @@ export default function ScannerPage() {
   }
 
   async function handleBarcodeDetected(code: string) {
-    const cleanCode = code.trim();
+    const cleanCode = normalizeBarcodeInput(code);
 
     if (!cleanCode) return;
-
     if (processingRef.current) return;
-
     if (lastScannedRef.current === cleanCode) return;
 
     processingRef.current = true;
     lastScannedRef.current = cleanCode;
 
     setBarcode(cleanCode);
+    setManualBarcode(cleanCode);
     setMessage("Código lido. Consultando produto...");
     setError("");
 
@@ -100,62 +89,21 @@ export default function ScannerPage() {
   async function startScanner() {
     try {
       setError("");
-      setMessage("Aponte a câmera para o código de barras.");
+      setMessage("Abrindo câmera...");
       setProduct(null);
       lastScannedRef.current = null;
       processingRef.current = false;
 
       await stopScanner();
 
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
-        formatsToSupport: barcodeFormats,
-        verbose: false,
-      });
-
-      scannerRef.current = scanner;
-
       setStarted(true);
       setScanning(true);
 
-      const cameras = await Html5Qrcode.getCameras();
-
-      const backCamera =
-        cameras.find((camera) =>
-          camera.label.toLowerCase().includes("back")
-        ) ||
-        cameras.find((camera) =>
-          camera.label.toLowerCase().includes("traseira")
-        ) ||
-        cameras[cameras.length - 1];
-
-      const cameraConfig = backCamera
-        ? {
-            deviceId: {
-              exact: backCamera.id,
-            },
-          }
-        : {
-            facingMode: "environment",
-          };
-
-      await scanner.start(
-        cameraConfig,
-        {
-          fps: 15,
-          qrbox: {
-            width: 320,
-            height: 180,
-          },
-          aspectRatio: 1.7777778,
-          disableFlip: false,
-        },
-        async (decodedText) => {
-          await handleBarcodeDetected(decodedText);
-        },
-        () => {
-          // frames sem código são normais
-        }
-      );
+      scannerRef.current = await startBarcodeScanner({
+        elementId: SCANNER_ELEMENT_ID,
+        onDetected: handleBarcodeDetected,
+        onStatus: setMessage,
+      });
     } catch (err) {
       setScanning(false);
       setStarted(false);
@@ -171,6 +119,7 @@ export default function ScannerPage() {
     await stopScanner();
 
     setBarcode("");
+    setManualBarcode("");
     setProduct(null);
     setMessage("");
     setError("");
@@ -180,6 +129,10 @@ export default function ScannerPage() {
     await startScanner();
   }
 
+  async function searchManualBarcode() {
+    await handleBarcodeDetected(manualBarcode);
+  }
+
   function goToProduct() {
     if (!product) return;
 
@@ -187,9 +140,11 @@ export default function ScannerPage() {
   }
 
   function goToCreateProduct() {
-    if (!barcode) return;
+    const cleanCode = normalizeBarcodeInput(barcode || manualBarcode);
 
-    router.push(`/produtos/novo?barcode=${encodeURIComponent(barcode)}`);
+    if (!cleanCode) return;
+
+    router.push(`/produtos/novo?barcode=${encodeURIComponent(cleanCode)}`);
   }
 
   useEffect(() => {
@@ -216,7 +171,7 @@ export default function ScannerPage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-300">
-              Aproxime bem a câmera e alinhe o código dentro da área.
+              No iPhone, toque em iniciar e mantenha o código bem iluminado na horizontal.
             </p>
           </div>
         </div>
@@ -226,8 +181,10 @@ export default function ScannerPage() {
         <div className="bg-black p-3">
           <div
             id={SCANNER_ELEMENT_ID}
-            className="min-h-[380px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[320px]"
-          />
+            className="flex min-h-[380px] items-center justify-center overflow-hidden rounded-[1.5rem] bg-slate-950 text-center text-sm font-bold text-slate-400 sm:min-h-[320px]"
+          >
+            Toque em “Iniciar câmera” para começar.
+          </div>
         </div>
 
         <div className="space-y-4 p-5">
@@ -241,6 +198,15 @@ export default function ScannerPage() {
             </button>
           )}
 
+          {started && scanning && (
+            <button
+              onClick={stopScanner}
+              className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-4 text-sm font-black text-slate-700"
+            >
+              Parar câmera
+            </button>
+          )}
+
           {started && !scanning && (
             <button
               onClick={resetScanner}
@@ -250,6 +216,47 @@ export default function ScannerPage() {
               Ler outro código
             </button>
           )}
+
+          <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+            <p className="text-sm font-black text-slate-950">
+              Código manual ou leitor Bluetooth/USB
+            </p>
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <div className="relative flex-1">
+                <Keyboard
+                  size={18}
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  value={manualBarcode}
+                  onChange={(event) =>
+                    setManualBarcode(normalizeBarcodeInput(event.target.value))
+                  }
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      searchManualBarcode();
+                    }
+                  }}
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="Digite ou passe o leitor físico"
+                  className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 font-mono text-sm font-bold outline-none focus:border-slate-950"
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={searchManualBarcode}
+                disabled={!manualBarcode}
+                className="rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white disabled:opacity-50"
+              >
+                Buscar
+              </button>
+            </div>
+          </div>
 
           {barcode && (
             <div className="rounded-2xl bg-slate-50 p-4">
@@ -305,7 +312,7 @@ export default function ScannerPage() {
             </div>
           )}
 
-          {barcode && !product && !scanning && (
+          {(barcode || manualBarcode) && !product && !scanning && (
             <button
               onClick={goToCreateProduct}
               className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"

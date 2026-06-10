@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Download, Smartphone, X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Download, Share, Smartphone, X } from "lucide-react";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -14,7 +14,14 @@ type BeforeInstallPromptEvent = Event & {
 function isIos() {
   if (typeof window === "undefined") return false;
 
-  return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
+  const userAgent = window.navigator.userAgent.toLowerCase();
+  const platform = window.navigator.platform?.toLowerCase() || "";
+  const maxTouchPoints = window.navigator.maxTouchPoints || 0;
+
+  return (
+    /iphone|ipad|ipod/.test(userAgent) ||
+    (platform === "macintel" && maxTouchPoints > 1)
+  );
 }
 
 function isStandalone() {
@@ -22,50 +29,56 @@ function isStandalone() {
 
   return (
     window.matchMedia("(display-mode: standalone)").matches ||
-    // @ts-expect-error Safari iOS
+    // @ts-expect-error Safari iOS expõe essa propriedade fora do tipo padrão.
     window.navigator.standalone === true
   );
 }
+
+function canUseSessionStorage() {
+  try {
+    return typeof window !== "undefined" && Boolean(window.sessionStorage);
+  } catch {
+    return false;
+  }
+}
+
+const DISMISS_KEY = "limastock_pwa_install_dismissed_session_v2";
 
 export function PwaInstallButton() {
   const [installEvent, setInstallEvent] =
     useState<BeforeInstallPromptEvent | null>(null);
 
-  const [showIosHint, setShowIosHint] = useState(false);
   const [installed, setInstalled] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
+  const ios = useMemo(() => isIos(), []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
-    if (process.env.NODE_ENV !== "production") return;
 
     if (isStandalone()) {
       setInstalled(true);
       return;
     }
 
-    const alreadyDismissed =
-      localStorage.getItem("limastock_pwa_install_dismissed") === "true";
-
-    if (alreadyDismissed) {
-      setDismissed(true);
-      return;
+    if (canUseSessionStorage()) {
+      setDismissed(sessionStorage.getItem(DISMISS_KEY) === "true");
     }
 
-    if (isIos()) {
-      setShowIosHint(true);
+    if (ios) {
+      setShowHelp(true);
     }
 
     function handleBeforeInstallPrompt(event: Event) {
       event.preventDefault();
       setInstallEvent(event as BeforeInstallPromptEvent);
+      setShowHelp(true);
     }
 
     function handleAppInstalled() {
       setInstalled(true);
       setInstallEvent(null);
-      setShowIosHint(false);
+      setShowHelp(false);
     }
 
     window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
@@ -78,7 +91,7 @@ export function PwaInstallButton() {
       );
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
-  }, []);
+  }, [ios]);
 
   async function installApp() {
     if (!installEvent) return;
@@ -95,13 +108,16 @@ export function PwaInstallButton() {
   }
 
   function dismiss() {
-    localStorage.setItem("limastock_pwa_install_dismissed", "true");
+    if (canUseSessionStorage()) {
+      sessionStorage.setItem(DISMISS_KEY, "true");
+    }
+
     setDismissed(true);
-    setShowIosHint(false);
+    setShowHelp(false);
     setInstallEvent(null);
   }
 
-  if (installed || dismissed) {
+  if (installed || dismissed || !showHelp) {
     return null;
   }
 
@@ -120,7 +136,7 @@ export function PwaInstallButton() {
               </p>
 
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                Use o sistema como aplicativo no celular.
+                Use o sistema como aplicativo no celular, com ícone na tela inicial.
               </p>
 
               <div className="mt-4 flex gap-2">
@@ -143,6 +159,7 @@ export function PwaInstallButton() {
             <button
               onClick={dismiss}
               className="rounded-xl bg-slate-100 p-2 text-slate-600"
+              aria-label="Fechar aviso de instalação"
             >
               <X size={16} />
             </button>
@@ -152,7 +169,7 @@ export function PwaInstallButton() {
     );
   }
 
-  if (showIosHint) {
+  if (ios) {
     return (
       <div className="fixed bottom-5 left-4 right-4 z-50 sm:left-auto sm:max-w-sm">
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-2xl">
@@ -163,12 +180,17 @@ export function PwaInstallButton() {
 
             <div className="min-w-0 flex-1">
               <p className="text-sm font-black text-slate-950">
-                Instalar LimaStock
+                Instalar LimaStock no iPhone
               </p>
 
               <p className="mt-1 text-xs font-semibold text-slate-500">
-                No iPhone, toque em compartilhar e depois em “Adicionar à Tela
-                de Início”.
+                No Safari, toque no botão de compartilhar
+                <Share className="mx-1 inline" size={14} />
+                e escolha “Adicionar à Tela de Início”.
+              </p>
+
+              <p className="mt-2 text-[11px] font-semibold text-slate-400">
+                O iPhone não exibe um instalador automático como o Android; ele usa o menu de compartilhar.
               </p>
 
               <button
@@ -182,6 +204,7 @@ export function PwaInstallButton() {
             <button
               onClick={dismiss}
               className="rounded-xl bg-slate-100 p-2 text-slate-600"
+              aria-label="Fechar aviso de instalação"
             >
               <X size={16} />
             </button>

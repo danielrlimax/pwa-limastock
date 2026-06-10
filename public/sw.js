@@ -1,18 +1,23 @@
-const CACHE_NAME = "limastock-static-v1";
-
+const CACHE_NAME = "limastock-static-v2";
 const OFFLINE_URL = "/offline";
+
+const STATIC_ASSETS = [
+  OFFLINE_URL,
+  "/manifest.webmanifest",
+  "/icons/icon.svg",
+  "/icons/maskable-icon.svg",
+  "/icons/icon-192.png",
+  "/icons/icon-512.png",
+  "/icons/maskable-icon-512.png",
+  "/apple-touch-icon.png"
+];
 
 self.addEventListener("install", (event) => {
   self.skipWaiting();
 
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll([
-        OFFLINE_URL,
-        "/manifest.webmanifest",
-        "/icons/icon.svg",
-        "/icons/maskable-icon.svg"
-      ]);
+      return cache.addAll(STATIC_ASSETS);
     })
   );
 });
