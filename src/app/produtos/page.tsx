@@ -340,57 +340,40 @@ export default function ProdutosPage() {
   }, []);
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-[2rem] bg-slate-950 p-8 text-white">
-        <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
-          <div className="flex items-center gap-4">
-            <div className="rounded-3xl bg-white p-4 text-slate-950">
-              <Package size={28} />
-            </div>
+    <div className="space-y-6">
+      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">
+            Produtos
+          </h1>
 
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">
-                LimaStock
-              </p>
-              <h1 className="text-3xl font-black">Produtos</h1>
-              <p className="mt-1 text-slate-300">
-                Cadastre produtos, categorias e acompanhe estoque baixo.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <Link
-              href="/produtos/novo"
-              prefetch
-              className="flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-slate-100 active:scale-95"
-            >
-              <Barcode size={18} />
-              Cadastrar por código
-            </Link>
-
-            {tenant && (
-              <div className="rounded-3xl border border-white/10 bg-white/10 px-5 py-4">
-                <p className="text-sm text-slate-300">Estabelecimento</p>
-                <p className="font-bold">{tenant.name}</p>
-              </div>
-            )}
-          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            Cadastre produtos, organize categorias e acompanhe o estoque.
+          </p>
         </div>
+
+        <Link
+          href="/produtos/novo"
+          prefetch
+          className="flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white transition hover:bg-slate-800 active:scale-95"
+        >
+          <Barcode size={18} />
+          Cadastrar por código
+        </Link>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <MetricCard label="Produtos cadastrados" value={totalProducts} />
-        <MetricCard label="Produtos ativos" value={activeProducts} />
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Produtos" value={totalProducts} />
+        <MetricCard label="Ativos" value={activeProducts} />
         <MetricCard
           label="Estoque baixo"
           value={lowStockProducts}
           alert={lowStockProducts > 0}
         />
-        <MetricCard label="Categorias ativas" value={activeCategories.length} />
+        <MetricCard label="Categorias" value={activeCategories.length} />
       </section>
 
-      <div className="flex gap-2 overflow-x-auto rounded-3xl bg-white p-2 shadow-sm">
+      <div className="flex gap-2 overflow-x-auto rounded-3xl border border-slate-200 bg-white p-2 shadow-sm">
         <button
           type="button"
           onClick={() => setActiveTab("products")}
@@ -415,6 +398,13 @@ export default function ProdutosPage() {
           Categorias
         </button>
       </div>
+
+      {tenant && (
+        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm text-slate-600 shadow-sm">
+          Estabelecimento atual:{" "}
+          <span className="font-black text-slate-950">{tenant.name}</span>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-2xl border border-red-100 bg-red-50 px-5 py-4 text-sm font-semibold text-red-700">
@@ -444,8 +434,7 @@ export default function ProdutosPage() {
                   {editingProduct ? "Editar produto" : "Novo produto"}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Cadastro rápido manual. Para fluxo com código, use o botão do
-                  topo.
+                  Cadastro manual rápido.
                 </p>
               </div>
             </div>
@@ -469,7 +458,9 @@ export default function ProdutosPage() {
               <Input
                 label="Código de barras"
                 value={form.barcode}
-                onChange={(value) => updateForm("barcode", normalizeBarcode(value))}
+                onChange={(value) =>
+                  updateForm("barcode", normalizeBarcode(value))
+                }
                 placeholder="789..."
               />
 
@@ -558,19 +549,6 @@ export default function ProdutosPage() {
                   placeholder="0"
                 />
               </div>
-
-              <label className="flex items-center gap-3 rounded-2xl bg-slate-50 px-4 py-3">
-                <input
-                  type="checkbox"
-                  checked={form.active}
-                  onChange={(event) =>
-                    updateForm("active", event.target.checked)
-                  }
-                />
-                <span className="text-sm font-bold text-slate-700">
-                  Produto ativo
-                </span>
-              </label>
             </div>
 
             <div className="mt-6 flex gap-3">
@@ -627,7 +605,7 @@ export default function ProdutosPage() {
                   Nova categoria
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Categorias ajudam a organizar os produtos.
+                  Organize seus produtos por grupos.
                 </p>
               </div>
             </div>
@@ -697,7 +675,7 @@ function ProductsTable({
               Lista de produtos
             </h2>
             <p className="mt-1 text-sm text-slate-500">
-              Produtos carregados pela API.
+              Produtos cadastrados no estabelecimento.
             </p>
           </div>
 
@@ -734,7 +712,7 @@ function ProductsTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1000px] text-left text-sm">
+        <table className="w-full min-w-[900px] text-left text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="px-6 py-4 font-bold">Produto</th>
@@ -875,7 +853,7 @@ function CategoriesTable({
           <div>
             <h2 className="text-xl font-black text-slate-950">Categorias</h2>
             <p className="mt-1 text-sm text-slate-500">
-              Organize os produtos do estabelecimento.
+              Categorias cadastradas.
             </p>
           </div>
         </div>
@@ -971,14 +949,14 @@ function MetricCard({
   alert?: boolean;
 }) {
   return (
-    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-5 shadow-sm">
       <p className="text-sm font-bold text-slate-500">{label}</p>
 
       <p
         className={
           alert
-            ? "mt-2 text-4xl font-black text-red-600"
-            : "mt-2 text-4xl font-black text-slate-950"
+            ? "mt-2 text-3xl font-black text-red-600"
+            : "mt-2 text-3xl font-black text-slate-950"
         }
       >
         {value}

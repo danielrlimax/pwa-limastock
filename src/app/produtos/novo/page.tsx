@@ -11,6 +11,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { apiFetch } from "@/lib/api";
@@ -314,27 +315,23 @@ function NovoProdutoContent() {
 
   return (
     <div className="space-y-6">
-      <section className="rounded-[2rem] bg-slate-950 p-5 text-white shadow-sm sm:p-6">
-        <div className="flex items-center gap-4">
-          <div className="rounded-3xl bg-white p-4 text-slate-950">
-            <PackagePlus size={28} />
-          </div>
+      <section className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div>
+          <h1 className="text-2xl font-black text-slate-950 sm:text-3xl">
+            Cadastrar produto por código
+          </h1>
 
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 sm:text-sm">
-              Produtos
-            </p>
-
-            <h1 className="text-2xl font-black sm:text-3xl">
-              Cadastrar produto por código
-            </h1>
-
-            <p className="mt-1 text-sm text-slate-300">
-              Digite o código, use leitor físico/Bluetooth ou tente preencher com
-              a câmera.
-            </p>
-          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            Use leitor físico/Bluetooth, digite o código ou tente a câmera.
+          </p>
         </div>
+
+        <Link
+          href="/produtos"
+          className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50 active:scale-95"
+        >
+          Voltar para produtos
+        </Link>
       </section>
 
       {error && (
@@ -360,15 +357,20 @@ function NovoProdutoContent() {
         className="grid gap-6 xl:grid-cols-[1fr_420px]"
       >
         <section className="space-y-5 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-          <div>
-            <h2 className="text-xl font-black text-slate-950">
-              Código do produto
-            </h2>
+          <div className="flex items-center gap-3">
+            <div className="rounded-2xl bg-slate-950 p-3 text-white">
+              <PackagePlus size={20} />
+            </div>
 
-            <p className="mt-1 text-sm text-slate-500">
-              Para leitor físico ou Bluetooth, clique no campo abaixo e passe o
-              produto no leitor. Ele vai preencher como se fosse um teclado.
-            </p>
+            <div>
+              <h2 className="text-xl font-black text-slate-950">
+                Dados do produto
+              </h2>
+
+              <p className="text-sm text-slate-500">
+                O campo manual garante o cadastro mesmo sem câmera.
+              </p>
+            </div>
           </div>
 
           <div>
@@ -411,7 +413,7 @@ function NovoProdutoContent() {
                 className="flex items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-3 text-sm font-black text-white"
               >
                 <Camera size={18} />
-                Usar câmera
+                Câmera
               </button>
 
               <button
@@ -426,15 +428,9 @@ function NovoProdutoContent() {
             </div>
 
             <p className="mt-2 text-xs font-semibold text-slate-400">
-              A câmera é apenas uma ajuda. Para uso real em loja, leitor
-              Bluetooth/USB ou digitação manual é mais confiável.
+              Para leitor físico/Bluetooth, deixe este campo selecionado e passe
+              o produto no leitor.
             </p>
-          </div>
-
-          <div className="border-t border-slate-100 pt-5">
-            <h2 className="text-xl font-black text-slate-950">
-              Dados do produto
-            </h2>
           </div>
 
           <Input
@@ -491,7 +487,7 @@ function NovoProdutoContent() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              Defina preço de venda, custo e estoque mínimo.
+              Defina preço, custo e estoque mínimo.
             </p>
           </div>
 
@@ -597,7 +593,7 @@ function NovoProdutoContent() {
                   className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
                 >
                   <RotateCcw size={18} />
-                  Tentar câmera novamente
+                  Tentar novamente
                 </button>
               )}
 
