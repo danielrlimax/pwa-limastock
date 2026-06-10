@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Barcode, Camera, Package, Plus, RotateCcw } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { apiFetch } from "@/lib/api";
 import { getCurrentTenant } from "@/lib/tenant";
 import { formatMoney } from "@/lib/utils";
@@ -21,11 +21,23 @@ type Product = {
 
 const SCANNER_ELEMENT_ID = "limastock-barcode-scanner";
 
+const barcodeFormats = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR,
+];
+
 export default function ScannerPage() {
   const router = useRouter();
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScannedRef = useRef<string | null>(null);
+  const processingRef = useRef(false);
 
   const [started, setStarted] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -40,9 +52,12 @@ export default function ScannerPage() {
       if (scannerRef.current?.isScanning) {
         await scannerRef.current.stop();
       }
+
+      await scannerRef.current?.clear();
     } catch {
       // ignora erro ao parar câmera
     } finally {
+      scannerRef.current = null;
       setScanning(false);
     }
   }
@@ -52,10 +67,11 @@ export default function ScannerPage() {
 
     if (!cleanCode) return;
 
-    if (lastScannedRef.current === cleanCode) {
-      return;
-    }
+    if (processingRef.current) return;
 
+    if (lastScannedRef.current === cleanCode) return;
+
+    processingRef.current = true;
     lastScannedRef.current = cleanCode;
 
     setBarcode(cleanCode);
@@ -76,33 +92,62 @@ export default function ScannerPage() {
     } catch {
       setProduct(null);
       setMessage("Produto não encontrado. Você pode cadastrar agora.");
+    } finally {
+      processingRef.current = false;
     }
   }
 
   async function startScanner() {
     try {
       setError("");
-      setMessage("");
+      setMessage("Aponte a câmera para o código de barras.");
       setProduct(null);
       lastScannedRef.current = null;
+      processingRef.current = false;
 
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
+      await stopScanner();
+
+      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
+        formatsToSupport: barcodeFormats,
+        verbose: false,
+      });
+
       scannerRef.current = scanner;
 
       setStarted(true);
       setScanning(true);
 
+      const cameras = await Html5Qrcode.getCameras();
+
+      const backCamera =
+        cameras.find((camera) =>
+          camera.label.toLowerCase().includes("back")
+        ) ||
+        cameras.find((camera) =>
+          camera.label.toLowerCase().includes("traseira")
+        ) ||
+        cameras[cameras.length - 1];
+
+      const cameraConfig = backCamera
+        ? {
+            deviceId: {
+              exact: backCamera.id,
+            },
+          }
+        : {
+            facingMode: "environment",
+          };
+
       await scanner.start(
+        cameraConfig,
         {
-          facingMode: "environment",
-        },
-        {
-          fps: 10,
+          fps: 15,
           qrbox: {
-            width: 260,
-            height: 160,
+            width: 320,
+            height: 180,
           },
-          aspectRatio: 1.777,
+          aspectRatio: 1.7777778,
+          disableFlip: false,
         },
         async (decodedText) => {
           await handleBarcodeDetected(decodedText);
@@ -113,6 +158,7 @@ export default function ScannerPage() {
       );
     } catch (err) {
       setScanning(false);
+      setStarted(false);
       setError(
         err instanceof Error
           ? err.message
@@ -129,6 +175,7 @@ export default function ScannerPage() {
     setMessage("");
     setError("");
     lastScannedRef.current = null;
+    processingRef.current = false;
 
     await startScanner();
   }
@@ -169,7 +216,7 @@ export default function ScannerPage() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-300">
-              Aponte a câmera para o código do produto.
+              Aproxime bem a câmera e alinhe o código dentro da área.
             </p>
           </div>
         </div>
@@ -179,7 +226,7 @@ export default function ScannerPage() {
         <div className="bg-black p-3">
           <div
             id={SCANNER_ELEMENT_ID}
-            className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[300px]"
+            className="min-h-[380px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[320px]"
           />
         </div>
 

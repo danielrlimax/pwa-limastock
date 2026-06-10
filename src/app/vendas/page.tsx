@@ -8,13 +8,14 @@ import {
   Minus,
   Plus,
   Receipt,
+  RefreshCcw,
   RotateCcw,
   Search,
   ShoppingCart,
   Trash2,
   X,
 } from "lucide-react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { apiFetch } from "@/lib/api";
 import { getCurrentTenant } from "@/lib/tenant";
 import { formatMoney } from "@/lib/utils";
@@ -53,6 +54,17 @@ type CartItem = {
 
 const SCANNER_ELEMENT_ID = "limastock-sale-scanner";
 
+const barcodeFormats = [
+  Html5QrcodeSupportedFormats.EAN_13,
+  Html5QrcodeSupportedFormats.EAN_8,
+  Html5QrcodeSupportedFormats.UPC_A,
+  Html5QrcodeSupportedFormats.UPC_E,
+  Html5QrcodeSupportedFormats.CODE_128,
+  Html5QrcodeSupportedFormats.CODE_39,
+  Html5QrcodeSupportedFormats.ITF,
+  Html5QrcodeSupportedFormats.CODABAR,
+];
+
 const paymentOptions = [
   {
     label: "Pix",
@@ -75,6 +87,7 @@ const paymentOptions = [
 export default function VendasPage() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScannedRef = useRef<string | null>(null);
+  const processingScanRef = useRef(false);
 
   const [products, setProducts] = useState<Product[]>([]);
   const [recentSales, setRecentSales] = useState<Sale[]>([]);
@@ -83,7 +96,6 @@ export default function VendasPage() {
   const [search, setSearch] = useState("");
   const [barcodeInput, setBarcodeInput] = useState("");
 
-  const [customerName, setCustomerName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("pix");
   const [discount, setDiscount] = useState("0");
 
@@ -119,7 +131,6 @@ export default function VendasPage() {
   }, [cart]);
 
   const discountNumber = Number(discount || 0);
-
   const total = Math.max(subtotal - discountNumber, 0);
 
   async function loadData() {
@@ -224,7 +235,6 @@ export default function VendasPage() {
 
   function clearCart() {
     setCart([]);
-    setCustomerName("");
     setDiscount("0");
     setPaymentMethod("pix");
   }
@@ -266,9 +276,12 @@ export default function VendasPage() {
       if (scannerRef.current?.isScanning) {
         await scannerRef.current.stop();
       }
+
+      await scannerRef.current?.clear();
     } catch {
       // ignora erro ao parar câmera
     } finally {
+      scannerRef.current = null;
       setScannerStarted(false);
     }
   }
@@ -277,39 +290,67 @@ export default function VendasPage() {
     try {
       setError("");
       setSuccess("");
-      setScannerMessage("");
+      setScannerMessage("Aponte para o código de barras.");
       lastScannedRef.current = null;
+      processingScanRef.current = false;
 
-      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID);
+      await stopScanner();
+
+      const scanner = new Html5Qrcode(SCANNER_ELEMENT_ID, {
+        formatsToSupport: barcodeFormats,
+        verbose: false,
+      });
+
       scannerRef.current = scanner;
 
       setScannerStarted(true);
 
+      const cameras = await Html5Qrcode.getCameras();
+
+      const backCamera =
+        cameras.find((camera) =>
+          camera.label.toLowerCase().includes("back")
+        ) ||
+        cameras.find((camera) =>
+          camera.label.toLowerCase().includes("traseira")
+        ) ||
+        cameras[cameras.length - 1];
+
+      const cameraConfig = backCamera
+        ? {
+            deviceId: {
+              exact: backCamera.id,
+            },
+          }
+        : {
+            facingMode: "environment",
+          };
+
       await scanner.start(
+        cameraConfig,
         {
-          facingMode: "environment",
-        },
-        {
-          fps: 10,
+          fps: 15,
           qrbox: {
-            width: 260,
-            height: 160,
+            width: 320,
+            height: 180,
           },
-          aspectRatio: 1.777,
+          aspectRatio: 1.7777778,
+          disableFlip: false,
         },
         async (decodedText) => {
           const cleanCode = decodedText.trim();
 
           if (!cleanCode) return;
+          if (processingScanRef.current) return;
+          if (lastScannedRef.current === cleanCode) return;
 
-          if (lastScannedRef.current === cleanCode) {
-            return;
-          }
-
+          processingScanRef.current = true;
           lastScannedRef.current = cleanCode;
 
           await stopScanner();
           await findProductByBarcode(cleanCode);
+
+          processingScanRef.current = false;
         },
         () => {
           // frames sem código são normais
@@ -328,15 +369,16 @@ export default function VendasPage() {
   async function openScanner() {
     setScannerOpen(true);
 
-    setTimeout(() => {
+    window.setTimeout(() => {
       startScanner();
-    }, 300);
+    }, 500);
   }
 
   async function closeScanner() {
     await stopScanner();
     setScannerOpen(false);
     setScannerMessage("");
+    processingScanRef.current = false;
   }
 
   async function handleCreateSale(event: FormEvent<HTMLFormElement>) {
@@ -369,7 +411,7 @@ export default function VendasPage() {
           })),
           payment_method: paymentMethod,
           discount: discountNumber,
-          customer_name: customerName.trim() || null,
+          customer_name: null,
           notes: null,
         },
       });
@@ -620,26 +662,13 @@ export default function VendasPage() {
             ))}
 
             {!cart.length && (
-              <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
-                Nenhum produto no carrinho.
+              <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
+                Carrinho vazio.
               </div>
             )}
           </div>
 
           <div className="space-y-4 border-t border-slate-100 p-5">
-            <div>
-              <label className="text-sm font-bold text-slate-700">
-                Cliente
-              </label>
-
-              <input
-                value={customerName}
-                onChange={(event) => setCustomerName(event.target.value)}
-                placeholder="Consumidor final"
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-950"
-              />
-            </div>
-
             <div>
               <label className="text-sm font-bold text-slate-700">
                 Pagamento
@@ -648,7 +677,7 @@ export default function VendasPage() {
               <select
                 value={paymentMethod}
                 onChange={(event) => setPaymentMethod(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-950"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-slate-950"
               >
                 {paymentOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -669,16 +698,24 @@ export default function VendasPage() {
                 step="0.01"
                 value={discount}
                 onChange={(event) => setDiscount(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-950"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-slate-950"
               />
             </div>
 
-            <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
-              <TotalRow label="Subtotal" value={formatMoney(subtotal)} />
-              <TotalRow label="Desconto" value={formatMoney(discountNumber)} />
+            <div className="rounded-3xl bg-slate-950 p-5 text-white">
+              <div className="flex justify-between text-sm text-slate-300">
+                <span>Subtotal</span>
+                <span>{formatMoney(subtotal)}</span>
+              </div>
 
-              <div className="border-t border-slate-200 pt-2">
-                <TotalRow label="Total" value={formatMoney(total)} strong />
+              <div className="mt-2 flex justify-between text-sm text-slate-300">
+                <span>Desconto</span>
+                <span>{formatMoney(discountNumber)}</span>
+              </div>
+
+              <div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-xl font-black">
+                <span>Total</span>
+                <span>{formatMoney(total)}</span>
               </div>
             </div>
 
@@ -691,11 +728,11 @@ export default function VendasPage() {
               {saving ? "Finalizando..." : "Finalizar venda"}
             </button>
 
-            {cart.length > 0 && (
+            {!!cart.length && (
               <button
                 type="button"
                 onClick={clearCart}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-4 text-sm font-black text-slate-700"
               >
                 <X size={18} />
                 Limpar carrinho
@@ -766,7 +803,7 @@ export default function VendasPage() {
                     colSpan={6}
                     className="px-6 py-8 text-center text-slate-500"
                   >
-                    Nenhuma venda registrada ainda.
+                    Nenhuma venda recente.
                   </td>
                 </tr>
               )}
@@ -776,94 +813,71 @@ export default function VendasPage() {
       </section>
 
       {scannerOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 p-4 backdrop-blur-sm">
-          <div className="mx-auto flex h-full max-w-xl flex-col justify-center">
-            <div className="overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-100 p-5">
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
-                    Scanner de venda
-                  </p>
+        <div className="fixed inset-0 z-50 bg-black/70 p-4">
+          <div className="mx-auto flex h-full max-w-xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 p-5">
+              <div>
+                <h2 className="text-xl font-black text-slate-950">
+                  Ler código
+                </h2>
 
-                  <h2 className="text-2xl font-black text-slate-950">
-                    Ler produto
-                  </h2>
-                </div>
-
-                <button
-                  onClick={closeScanner}
-                  className="rounded-2xl bg-slate-100 p-3 text-slate-700"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              <div className="bg-black p-3">
-                <div
-                  id={SCANNER_ELEMENT_ID}
-                  className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[320px]"
-                />
-              </div>
-
-              <div className="space-y-3 p-5">
-                {scannerMessage && (
-                  <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-                    {scannerMessage}
-                  </div>
-                )}
-
-                {!scannerStarted && (
-                  <button
-                    onClick={startScanner}
-                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
-                  >
-                    <RotateCcw size={18} />
-                    Ler outro código
-                  </button>
-                )}
-
-                <p className="text-center text-xs font-semibold text-slate-400">
-                  Aponte a câmera para o código de barras do produto.
+                <p className="text-sm text-slate-500">
+                  Aproxime e alinhe o código de barras.
                 </p>
               </div>
+
+              <button
+                onClick={closeScanner}
+                className="rounded-2xl bg-slate-100 p-3 text-slate-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="flex-1 bg-black p-3">
+              <div
+                id={SCANNER_ELEMENT_ID}
+                className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950"
+              />
+            </div>
+
+            <div className="space-y-3 p-5">
+              {scannerMessage && (
+                <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+                  {scannerMessage}
+                </div>
+              )}
+
+              {!scannerStarted && (
+                <button
+                  type="button"
+                  onClick={startScanner}
+                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
+                >
+                  <RotateCcw size={18} />
+                  Tentar novamente
+                </button>
+              )}
+
+              <button
+                type="button"
+                onClick={closeScanner}
+                className="flex w-full items-center justify-center rounded-2xl bg-slate-100 px-5 py-4 text-sm font-black text-slate-700"
+              >
+                Fechar scanner
+              </button>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
 
-function TotalRow({
-  label,
-  value,
-  strong = false,
-}: {
-  label: string;
-  value: string;
-  strong?: boolean;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <p
-        className={
-          strong
-            ? "text-lg font-black text-slate-950"
-            : "text-sm font-bold text-slate-500"
-        }
+      <button
+        type="button"
+        onClick={loadData}
+        className="fixed bottom-24 right-4 z-30 rounded-2xl bg-white p-4 text-slate-950 shadow-lg xl:hidden"
       >
-        {label}
-      </p>
-
-      <p
-        className={
-          strong
-            ? "text-2xl font-black text-slate-950"
-            : "text-sm font-black text-slate-700"
-        }
-      >
-        {value}
-      </p>
+        <RefreshCcw size={20} />
+      </button>
     </div>
   );
 }
