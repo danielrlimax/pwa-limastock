@@ -41,7 +41,6 @@ function buildForwardHeaders(request: NextRequest) {
 
   headers.set("x-forwarded-host", request.nextUrl.host);
   headers.set("x-forwarded-proto", request.nextUrl.protocol.replace(":", ""));
-  headers.set("origin", request.nextUrl.origin);
 
   return headers;
 }
@@ -70,14 +69,14 @@ function copyResponseHeaders(backendResponse: Response) {
     }
   });
 
-  const getSetCookie = (
-    backendResponse.headers as Headers & {
-      getSetCookie?: () => string[];
-    }
-  ).getSetCookie;
+  const responseHeaders = backendResponse.headers as Headers & {
+    getSetCookie?: () => string[];
+  };
 
-  if (typeof getSetCookie === "function") {
-    for (const cookie of getSetCookie.call(backendResponse.headers)) {
+  if (typeof responseHeaders.getSetCookie === "function") {
+    const cookies = responseHeaders.getSetCookie();
+
+    for (const cookie of cookies) {
       headers.append("set-cookie", cookie);
     }
   } else {
@@ -143,11 +142,5 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
-    headers: {
-      "access-control-allow-origin": "*",
-      "access-control-allow-methods": "GET,POST,PATCH,DELETE,OPTIONS",
-      "access-control-allow-headers":
-        "Content-Type, Authorization, X-CSRF-Token, x-csrf-token",
-    },
   });
 }

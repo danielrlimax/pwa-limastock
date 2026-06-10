@@ -27,7 +27,6 @@ function LoginContent() {
     try {
       const response = await apiFetch<LoginResponse>("/auth/login", {
         method: "POST",
-        auth: false,
         body: {
           email,
           password,

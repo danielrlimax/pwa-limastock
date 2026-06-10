@@ -24,7 +24,6 @@ export class ApiError extends Error {
 type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
-  auth?: boolean;
   retry?: boolean;
 };
 
