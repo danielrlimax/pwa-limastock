@@ -1,10 +1,14 @@
-import { clearAuthSession, getCsrfToken, saveAuthSession, type RefreshResponse } from "./auth";
+import {
+  clearAuthSession,
+  getCsrfToken,
+  saveAuthSession,
+  type RefreshResponse,
+} from "./auth";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
-
-if (!API_URL) {
-  throw new Error("NEXT_PUBLIC_API_URL não configurada.");
-}
+const API_URL = (process.env.NEXT_PUBLIC_API_URL || "/api/v1").replace(
+  /\/$/,
+  ""
+);
 
 export class ApiError extends Error {
   status: number;
@@ -49,6 +53,7 @@ export async function apiFetch<T>(
   options: RequestOptions = {}
 ): Promise<T> {
   const { method = "GET", body, retry = true } = options;
+
   const upperMethod = method.toUpperCase();
 
   const headers: HeadersInit = {
@@ -85,9 +90,7 @@ export async function apiFetch<T>(
   }
 
   const detail =
-    typeof data?.detail === "string"
-      ? data.detail
-      : "Erro ao chamar API.";
+    typeof data?.detail === "string" ? data.detail : "Erro ao chamar API.";
 
   if (!response.ok) {
     throw new ApiError(response.status, detail);
