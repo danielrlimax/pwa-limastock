@@ -30,6 +30,28 @@ type RequestOptions = {
 
 const methodsThatNeedCsrf = ["POST", "PATCH", "DELETE", "PUT"];
 
+function getErrorDetail(data: unknown, status: number) {
+  if (
+    data &&
+    typeof data === "object" &&
+    "detail" in data &&
+    typeof data.detail === "string"
+  ) {
+    return data.detail;
+  }
+
+  if (
+    data &&
+    typeof data === "object" &&
+    "message" in data &&
+    typeof data.message === "string"
+  ) {
+    return data.message;
+  }
+
+  return `Erro ao chamar API. Status: ${status}`;
+}
+
 async function refreshSession() {
   const response = await fetch(`${API_URL}/auth/refresh`, {
     method: "POST",
@@ -89,11 +111,8 @@ export async function apiFetch<T>(
     throw new ApiError(401, "Sessão expirada. Faça login novamente.");
   }
 
-  const detail =
-    typeof data?.detail === "string" ? data.detail : "Erro ao chamar API.";
-
   if (!response.ok) {
-    throw new ApiError(response.status, detail);
+    throw new ApiError(response.status, getErrorDetail(data, response.status));
   }
 
   return data as T;
