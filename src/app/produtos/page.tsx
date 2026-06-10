@@ -22,7 +22,8 @@ type Category = {
   tenant_id: string;
   name: string;
   description: string | null;
-  active: boolean;
+  active?: boolean;
+  is_active?: boolean;
   created_at: string;
 };
 
@@ -38,7 +39,8 @@ type Product = {
   sale_price: string;
   current_stock: string;
   min_stock: string;
-  active: boolean;
+  active?: boolean;
+  is_active?: boolean;
   created_at: string;
 };
 
@@ -60,13 +62,23 @@ const emptyForm: ProductForm = {
   description: "",
   barcode: "",
   category_id: "",
-  unit: "unit",
+  unit: "un",
   cost_price: "",
   sale_price: "",
   current_stock: "0",
   min_stock: "0",
   active: true,
 };
+
+function isActive(entity: { active?: boolean; is_active?: boolean }) {
+  if (typeof entity.active === "boolean") return entity.active;
+  if (typeof entity.is_active === "boolean") return entity.is_active;
+  return true;
+}
+
+function normalizeBarcode(value: string) {
+  return value.trim().replace(/\s+/g, "");
+}
 
 export default function ProdutosPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null);
@@ -134,12 +146,12 @@ export default function ProdutosPage() {
       description: product.description || "",
       barcode: product.barcode || "",
       category_id: product.category_id || "",
-      unit: product.unit || "unit",
+      unit: product.unit || "un",
       cost_price: String(product.cost_price || ""),
       sale_price: String(product.sale_price || ""),
       current_stock: String(product.current_stock || "0"),
       min_stock: String(product.min_stock || "0"),
-      active: product.active,
+      active: isActive(product),
     });
 
     setActiveTab("products");
@@ -168,18 +180,25 @@ export default function ProdutosPage() {
       setError("");
       setSuccess("");
 
+      if (!form.name.trim()) {
+        throw new Error("Informe o nome do produto.");
+      }
+
+      if (!form.sale_price.trim()) {
+        throw new Error("Informe o preço de venda.");
+      }
+
       const payload = {
         tenant_id: tenant.id,
         category_id: form.category_id || null,
-        name: form.name,
-        description: form.description || null,
-        barcode: form.barcode || null,
-        unit: form.unit,
+        name: form.name.trim(),
+        description: form.description.trim() || null,
+        barcode: normalizeBarcode(form.barcode) || null,
+        unit: form.unit || "un",
         cost_price: Number(form.cost_price || 0),
         sale_price: Number(form.sale_price || 0),
         current_stock: Number(form.current_stock || 0),
         min_stock: Number(form.min_stock || 0),
-        active: form.active,
       };
 
       if (editingProduct) {
@@ -220,13 +239,16 @@ export default function ProdutosPage() {
       setError("");
       setSuccess("");
 
+      if (!categoryName.trim()) {
+        throw new Error("Informe o nome da categoria.");
+      }
+
       await apiFetch<Category>("/categories", {
         method: "POST",
         body: {
           tenant_id: tenant.id,
-          name: categoryName,
-          description: categoryDescription || null,
-          active: true,
+          name: categoryName.trim(),
+          description: categoryDescription.trim() || null,
         },
       });
 
@@ -250,11 +272,11 @@ export default function ProdutosPage() {
       await apiFetch<Product>(`/products/${product.id}`, {
         method: "PATCH",
         body: {
-          active: !product.active,
+          active: !isActive(product),
         },
       });
 
-      setSuccess(product.active ? "Produto desativado." : "Produto ativado.");
+      setSuccess(isActive(product) ? "Produto desativado." : "Produto ativado.");
       await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao alterar produto.");
@@ -269,12 +291,12 @@ export default function ProdutosPage() {
       await apiFetch<Category>(`/categories/${category.id}`, {
         method: "PATCH",
         body: {
-          active: !category.active,
+          active: !isActive(category),
         },
       });
 
       setSuccess(
-        category.active ? "Categoria desativada." : "Categoria ativada."
+        isActive(category) ? "Categoria desativada." : "Categoria ativada."
       );
 
       await loadData();
@@ -294,19 +316,21 @@ export default function ProdutosPage() {
         product.name.toLowerCase().includes(normalizedSearch) ||
         (product.barcode || "").toLowerCase().includes(normalizedSearch);
 
+      const productActive = isActive(product);
+
       const matchesStatus =
         statusFilter === "all" ||
-        (statusFilter === "active" && product.active) ||
-        (statusFilter === "inactive" && !product.active);
+        (statusFilter === "active" && productActive) ||
+        (statusFilter === "inactive" && !productActive);
 
       return matchesSearch && matchesStatus;
     });
   }, [products, search, statusFilter]);
 
-  const activeCategories = categories.filter((category) => category.active);
+  const activeCategories = categories.filter((category) => isActive(category));
 
   const totalProducts = products.length;
-  const activeProducts = products.filter((product) => product.active).length;
+  const activeProducts = products.filter((product) => isActive(product)).length;
   const lowStockProducts = products.filter((product) => {
     return Number(product.current_stock) <= Number(product.min_stock);
   }).length;
@@ -368,6 +392,7 @@ export default function ProdutosPage() {
 
       <div className="flex gap-2 overflow-x-auto rounded-3xl bg-white p-2 shadow-sm">
         <button
+          type="button"
           onClick={() => setActiveTab("products")}
           className={
             activeTab === "products"
@@ -379,6 +404,7 @@ export default function ProdutosPage() {
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab("categories")}
           className={
             activeTab === "categories"
@@ -443,7 +469,7 @@ export default function ProdutosPage() {
               <Input
                 label="Código de barras"
                 value={form.barcode}
-                onChange={(value) => updateForm("barcode", value)}
+                onChange={(value) => updateForm("barcode", normalizeBarcode(value))}
                 placeholder="789..."
               />
 
@@ -485,7 +511,7 @@ export default function ProdutosPage() {
                   onChange={(event) => updateForm("unit", event.target.value)}
                   className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-950"
                 >
-                  <option value="unit">Unidade</option>
+                  <option value="un">Unidade</option>
                   <option value="kg">Kg</option>
                   <option value="g">Gramas</option>
                   <option value="l">Litro</option>
@@ -731,6 +757,7 @@ function ProductsTable({
 
             {!loading &&
               products.map((product) => {
+                const productActive = isActive(product);
                 const isLowStock =
                   Number(product.current_stock) <= Number(product.min_stock);
 
@@ -782,18 +809,19 @@ function ProductsTable({
                     <td className="px-6 py-4">
                       <span
                         className={
-                          product.active
+                          productActive
                             ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
                             : "rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700"
                         }
                       >
-                        {product.active ? "Ativo" : "Inativo"}
+                        {productActive ? "Ativo" : "Inativo"}
                       </span>
                     </td>
 
                     <td className="px-6 py-4">
                       <div className="flex gap-2">
                         <button
+                          type="button"
                           onClick={() => startEdit(product)}
                           className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-bold text-white"
                         >
@@ -801,10 +829,11 @@ function ProductsTable({
                         </button>
 
                         <button
+                          type="button"
                           onClick={() => toggleProduct(product)}
                           className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700"
                         >
-                          {product.active ? "Desativar" : "Ativar"}
+                          {productActive ? "Desativar" : "Ativar"}
                         </button>
                       </div>
                     </td>
@@ -874,42 +903,49 @@ function CategoriesTable({
             )}
 
             {!loading &&
-              categories.map((category) => (
-                <tr key={category.id}>
-                  <td className="px-6 py-4 font-black text-slate-950">
-                    {category.name}
-                  </td>
+              categories.map((category) => {
+                const categoryActive = isActive(category);
 
-                  <td className="px-6 py-4 text-slate-600">
-                    {category.description || "-"}
-                  </td>
+                return (
+                  <tr key={category.id}>
+                    <td className="px-6 py-4 font-black text-slate-950">
+                      {category.name}
+                    </td>
 
-                  <td className="px-6 py-4">
-                    <span
-                      className={
-                        category.active
-                          ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
-                          : "rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700"
-                      }
-                    >
-                      {category.active ? "Ativa" : "Inativa"}
-                    </span>
-                  </td>
+                    <td className="px-6 py-4 text-slate-600">
+                      {category.description || "-"}
+                    </td>
 
-                  <td className="px-6 py-4 text-slate-600">
-                    {new Date(category.created_at).toLocaleDateString("pt-BR")}
-                  </td>
+                    <td className="px-6 py-4">
+                      <span
+                        className={
+                          categoryActive
+                            ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700"
+                            : "rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-700"
+                        }
+                      >
+                        {categoryActive ? "Ativa" : "Inativa"}
+                      </span>
+                    </td>
 
-                  <td className="px-6 py-4">
-                    <button
-                      onClick={() => toggleCategory(category)}
-                      className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700"
-                    >
-                      {category.active ? "Desativar" : "Ativar"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    <td className="px-6 py-4 text-slate-600">
+                      {category.created_at
+                        ? new Date(category.created_at).toLocaleDateString("pt-BR")
+                        : "-"}
+                    </td>
+
+                    <td className="px-6 py-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleCategory(category)}
+                        className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700"
+                      >
+                        {categoryActive ? "Desativar" : "Ativar"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
 
             {!loading && !categories.length && (
               <tr>

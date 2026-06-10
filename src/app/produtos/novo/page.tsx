@@ -77,6 +77,7 @@ function NovoProdutoContent() {
   const searchParams = useSearchParams();
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
+  const barcodeInputRef = useRef<HTMLInputElement | null>(null);
   const processingRef = useRef(false);
 
   const initialBarcode = onlyBarcodeChars(searchParams.get("barcode") || "");
@@ -239,6 +240,10 @@ function NovoProdutoContent() {
     setScannerOpen(false);
     setScannerMessage("");
     processingRef.current = false;
+
+    window.setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 100);
   }
 
   async function handleCreateProduct(event: FormEvent<HTMLFormElement>) {
@@ -278,11 +283,10 @@ function NovoProdutoContent() {
           description: description.trim() || null,
           barcode: cleanBarcode || null,
           unit: unit.trim() || "un",
-          cost_price: normalizeMoney(costPrice),
-          sale_price: normalizeMoney(salePrice),
-          current_stock: normalizeMoney(currentStock),
-          min_stock: normalizeMoney(minStock),
-          active: true,
+          cost_price: Number(normalizeMoney(costPrice)),
+          sale_price: Number(normalizeMoney(salePrice)),
+          current_stock: Number(normalizeMoney(currentStock)),
+          min_stock: Number(normalizeMoney(minStock)),
         },
       });
 
@@ -299,6 +303,10 @@ function NovoProdutoContent() {
   }
 
   useEffect(() => {
+    window.setTimeout(() => {
+      barcodeInputRef.current?.focus();
+    }, 300);
+
     return () => {
       stopScanner();
     };
@@ -322,7 +330,8 @@ function NovoProdutoContent() {
             </h1>
 
             <p className="mt-1 text-sm text-slate-300">
-              Digite o código de barras ou use a câmera para preencher o campo.
+              Digite o código, use leitor físico/Bluetooth ou tente preencher com
+              a câmera.
             </p>
           </div>
         </div>
@@ -353,12 +362,12 @@ function NovoProdutoContent() {
         <section className="space-y-5 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
           <div>
             <h2 className="text-xl font-black text-slate-950">
-              Dados do produto
+              Código do produto
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              O campo manual garante o cadastro mesmo quando a câmera não
-              consegue ler.
+              Para leitor físico ou Bluetooth, clique no campo abaixo e passe o
+              produto no leitor. Ele vai preencher como se fosse um teclado.
             </p>
           </div>
 
@@ -375,6 +384,7 @@ function NovoProdutoContent() {
                 />
 
                 <input
+                  ref={barcodeInputRef}
                   value={barcode}
                   onChange={(event) => {
                     const value = onlyBarcodeChars(event.target.value);
@@ -382,9 +392,15 @@ function NovoProdutoContent() {
                     setExistingProduct(null);
                   }}
                   onBlur={() => checkBarcodeExists()}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      checkBarcodeExists();
+                    }
+                  }}
                   inputMode="numeric"
                   autoComplete="off"
-                  placeholder="Digite os números do código"
+                  placeholder="Digite, cole ou leia o código"
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 font-mono text-sm font-bold outline-none focus:border-slate-950 focus:bg-white"
                 />
               </div>
@@ -410,9 +426,15 @@ function NovoProdutoContent() {
             </div>
 
             <p className="mt-2 text-xs font-semibold text-slate-400">
-              Para garantir resultado, digite os números impressos abaixo do
-              código. Leitores Bluetooth/USB também funcionam nesse campo.
+              A câmera é apenas uma ajuda. Para uso real em loja, leitor
+              Bluetooth/USB ou digitação manual é mais confiável.
             </p>
+          </div>
+
+          <div className="border-t border-slate-100 pt-5">
+            <h2 className="text-xl font-black text-slate-950">
+              Dados do produto
+            </h2>
           </div>
 
           <Input
@@ -431,12 +453,25 @@ function NovoProdutoContent() {
           />
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Input
-              label="Unidade"
-              value={unit}
-              onChange={setUnit}
-              placeholder="un"
-            />
+            <div>
+              <label className="text-sm font-bold text-slate-700">
+                Unidade
+              </label>
+
+              <select
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-slate-950"
+              >
+                <option value="un">Unidade</option>
+                <option value="kg">Kg</option>
+                <option value="g">Gramas</option>
+                <option value="l">Litro</option>
+                <option value="ml">Ml</option>
+                <option value="box">Caixa</option>
+                <option value="pack">Pacote</option>
+              </select>
+            </div>
 
             <Input
               label="Estoque inicial"
