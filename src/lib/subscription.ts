@@ -13,10 +13,39 @@ export type SubscriptionStatus = {
   asaas_subscription_id: string | null;
 };
 
+export type PlanUsage = {
+  tenant_id: string;
+  plan: {
+    id: string;
+    code: string;
+    name: string;
+    price_monthly: string | number;
+    max_products: number | null;
+    max_users: number | null;
+  };
+  usage: {
+    products: number;
+    users: number;
+  };
+  limits: {
+    products: number | null;
+    users: number | null;
+  };
+  remaining: {
+    products: number | null;
+    users: number | null;
+  };
+};
+
 let cachedSubscription: SubscriptionStatus | null = null;
+let cachedPlanUsage: PlanUsage | null = null;
 
 export function getCachedSubscription() {
   return cachedSubscription;
+}
+
+export function getCachedPlanUsage() {
+  return cachedPlanUsage;
 }
 
 export async function getCurrentSubscription(force = false) {
@@ -35,6 +64,23 @@ export async function getCurrentSubscription(force = false) {
   return subscription;
 }
 
+export async function getCurrentPlanUsage(force = false) {
+  if (!force && cachedPlanUsage) {
+    return cachedPlanUsage;
+  }
+
+  const tenant = await getCurrentTenant();
+
+  const usage = await apiFetch<PlanUsage>(
+    `/subscriptions/usage?tenant_id=${tenant.id}`
+  );
+
+  cachedPlanUsage = usage;
+
+  return usage;
+}
+
 export function clearSubscriptionCache() {
   cachedSubscription = null;
+  cachedPlanUsage = null;
 }
