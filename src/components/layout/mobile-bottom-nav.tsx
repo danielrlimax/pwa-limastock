@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   BarChart3,
   Barcode,
@@ -10,6 +10,7 @@ import {
   ShoppingCart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useEffect } from "react";
 
 const mobileNavItems = [
   {
@@ -41,8 +42,17 @@ const mobileNavItems = [
 
 export function MobileBottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
 
   const isAdminArea = pathname.startsWith("/admin");
+
+  useEffect(() => {
+    if (isAdminArea) return;
+
+    for (const item of mobileNavItems) {
+      router.prefetch(item.href);
+    }
+  }, [router, isAdminArea]);
 
   if (isAdminArea) {
     return null;
@@ -60,8 +70,14 @@ export function MobileBottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch
+              onClick={(event) => {
+                if (active) {
+                  event.preventDefault();
+                }
+              }}
               className={cn(
-                "flex flex-col items-center justify-center rounded-2xl px-2 py-2 text-[11px] font-black transition",
+                "flex flex-col items-center justify-center rounded-2xl px-2 py-2 text-[11px] font-black transition active:scale-95",
                 active
                   ? "bg-slate-950 text-white"
                   : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"

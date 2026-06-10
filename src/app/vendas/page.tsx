@@ -8,7 +8,6 @@ import {
   Minus,
   Plus,
   Receipt,
-  RefreshCcw,
   RotateCcw,
   Search,
   ShoppingCart,
@@ -45,6 +44,11 @@ type Sale = {
   total: string;
   status: string;
   created_at: string;
+};
+
+type SaleCreateResponse = {
+  sale: Sale;
+  items: unknown[];
 };
 
 type CartItem = {
@@ -84,13 +88,18 @@ const paymentOptions = [
   },
 ];
 
+let cachedProducts: Product[] | null = null;
+let cachedRecentSales: Sale[] | null = null;
+
 export default function VendasPage() {
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const lastScannedRef = useRef<string | null>(null);
   const processingScanRef = useRef(false);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [recentSales, setRecentSales] = useState<Sale[]>([]);
+  const [products, setProducts] = useState<Product[]>(cachedProducts || []);
+  const [recentSales, setRecentSales] = useState<Sale[]>(
+    cachedRecentSales || []
+  );
   const [cart, setCart] = useState<CartItem[]>([]);
 
   const [search, setSearch] = useState("");
@@ -103,7 +112,8 @@ export default function VendasPage() {
   const [scannerStarted, setScannerStarted] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!cachedProducts);
+  const [refreshing, setRefreshing] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const [error, setError] = useState("");
@@ -133,9 +143,14 @@ export default function VendasPage() {
   const discountNumber = Number(discount || 0);
   const total = Math.max(subtotal - discountNumber, 0);
 
-  async function loadData() {
+  async function loadData(silent = false) {
     try {
-      setLoading(true);
+      if (silent) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
       setError("");
 
       const tenant = await getCurrentTenant();
@@ -145,17 +160,27 @@ export default function VendasPage() {
         apiFetch<Sale[]>(`/sales?tenant_id=${tenant.id}`),
       ]);
 
+      const latestSales = salesData.slice(0, 8);
+
+      cachedProducts = productsData;
+      cachedRecentSales = latestSales;
+
       setProducts(productsData);
-      setRecentSales(salesData.slice(0, 8));
+      setRecentSales(latestSales);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao carregar vendas.");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    loadData();
+    if (!cachedProducts) {
+      loadData();
+    } else {
+      loadData(true);
+    }
 
     return () => {
       stopScanner();
@@ -239,6 +264,44 @@ export default function VendasPage() {
     setPaymentMethod("pix");
   }
 
+  function applySaleLocally(sale: Sale, soldItems: CartItem[]) {
+    const soldQuantities = new Map<string, number>();
+
+    for (const item of soldItems) {
+      soldQuantities.set(
+        item.product.id,
+        (soldQuantities.get(item.product.id) || 0) + item.quantity
+      );
+    }
+
+    setProducts((currentProducts) => {
+      const updatedProducts = currentProducts.map((product) => {
+        const quantitySold = soldQuantities.get(product.id) || 0;
+
+        if (!quantitySold) return product;
+
+        const currentStock = Number(product.current_stock || 0);
+        const nextStock = Math.max(currentStock - quantitySold, 0);
+
+        return {
+          ...product,
+          current_stock: String(nextStock),
+        };
+      });
+
+      cachedProducts = updatedProducts;
+
+      return updatedProducts;
+    });
+
+    setRecentSales((currentSales) => {
+      const updatedSales = [sale, ...currentSales].slice(0, 8);
+      cachedRecentSales = updatedSales;
+
+      return updatedSales;
+    });
+  }
+
   async function findProductByBarcode(code: string) {
     const cleanCode = code.trim();
 
@@ -305,29 +368,10 @@ export default function VendasPage() {
 
       setScannerStarted(true);
 
-      const cameras = await Html5Qrcode.getCameras();
-
-      const backCamera =
-        cameras.find((camera) =>
-          camera.label.toLowerCase().includes("back")
-        ) ||
-        cameras.find((camera) =>
-          camera.label.toLowerCase().includes("traseira")
-        ) ||
-        cameras[cameras.length - 1];
-
-      const cameraConfig = backCamera
-        ? {
-            deviceId: {
-              exact: backCamera.id,
-            },
-          }
-        : {
-            facingMode: "environment",
-          };
-
       await scanner.start(
-        cameraConfig,
+        {
+          facingMode: "environment",
+        },
         {
           fps: 15,
           qrbox: {
@@ -371,7 +415,7 @@ export default function VendasPage() {
 
     window.setTimeout(() => {
       startScanner();
-    }, 500);
+    }, 400);
   }
 
   async function closeScanner() {
@@ -394,6 +438,8 @@ export default function VendasPage() {
       return;
     }
 
+    const soldItemsSnapshot = [...cart];
+
     try {
       setSaving(true);
       setError("");
@@ -401,11 +447,11 @@ export default function VendasPage() {
 
       const tenant = await getCurrentTenant();
 
-      await apiFetch("/sales", {
+      const result = await apiFetch<SaleCreateResponse>("/sales", {
         method: "POST",
         body: {
           tenant_id: tenant.id,
-          items: cart.map((item) => ({
+          items: soldItemsSnapshot.map((item) => ({
             product_id: item.product.id,
             quantity: item.quantity,
           })),
@@ -416,9 +462,10 @@ export default function VendasPage() {
         },
       });
 
-      setSuccess("Venda finalizada com sucesso.");
+      applySaleLocally(result.sale, soldItemsSnapshot);
       clearCart();
-      await loadData();
+
+      setSuccess("Venda finalizada com sucesso.");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao finalizar venda.");
     } finally {
@@ -451,12 +498,13 @@ export default function VendasPage() {
               <h1 className="text-2xl font-black sm:text-3xl">Vendas</h1>
 
               <p className="mt-1 text-sm text-slate-300">
-                Monte o carrinho manualmente ou lendo código de barras.
+                Monte o carrinho manualmente ou digitando o código de barras.
               </p>
             </div>
           </div>
 
           <button
+            type="button"
             onClick={openScanner}
             className="flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-4 text-sm font-black text-slate-950"
           >
@@ -475,6 +523,12 @@ export default function VendasPage() {
       {success && (
         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
           {success}
+        </div>
+      )}
+
+      {refreshing && (
+        <div className="rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm font-bold text-blue-700">
+          Sincronizando dados em segundo plano...
         </div>
       )}
 
@@ -501,6 +555,7 @@ export default function VendasPage() {
                   value={barcodeInput}
                   onChange={(event) => setBarcodeInput(event.target.value)}
                   placeholder="Código manual"
+                  inputMode="numeric"
                   className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 font-mono text-sm font-semibold outline-none focus:border-slate-950 focus:bg-white"
                 />
 
@@ -522,9 +577,10 @@ export default function VendasPage() {
               return (
                 <button
                   key={product.id}
+                  type="button"
                   onClick={() => addProductToCart(product)}
                   disabled={stock <= 0}
-                  className="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+                  className="rounded-[1.75rem] border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
@@ -662,8 +718,8 @@ export default function VendasPage() {
             ))}
 
             {!cart.length && (
-              <div className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
-                Carrinho vazio.
+              <div className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
+                Nenhum produto no carrinho.
               </div>
             )}
           </div>
@@ -677,7 +733,7 @@ export default function VendasPage() {
               <select
                 value={paymentMethod}
                 onChange={(event) => setPaymentMethod(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-slate-950"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-950"
               >
                 {paymentOptions.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -698,24 +754,16 @@ export default function VendasPage() {
                 step="0.01"
                 value={discount}
                 onChange={(event) => setDiscount(event.target.value)}
-                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-slate-950"
+                className="mt-2 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-950"
               />
             </div>
 
-            <div className="rounded-3xl bg-slate-950 p-5 text-white">
-              <div className="flex justify-between text-sm text-slate-300">
-                <span>Subtotal</span>
-                <span>{formatMoney(subtotal)}</span>
-              </div>
+            <div className="space-y-2 rounded-2xl bg-slate-50 p-4">
+              <TotalRow label="Subtotal" value={formatMoney(subtotal)} />
+              <TotalRow label="Desconto" value={formatMoney(discountNumber)} />
 
-              <div className="mt-2 flex justify-between text-sm text-slate-300">
-                <span>Desconto</span>
-                <span>{formatMoney(discountNumber)}</span>
-              </div>
-
-              <div className="mt-4 flex justify-between border-t border-white/10 pt-4 text-xl font-black">
-                <span>Total</span>
-                <span>{formatMoney(total)}</span>
+              <div className="border-t border-slate-200 pt-2">
+                <TotalRow label="Total" value={formatMoney(total)} strong />
               </div>
             </div>
 
@@ -728,11 +776,11 @@ export default function VendasPage() {
               {saving ? "Finalizando..." : "Finalizar venda"}
             </button>
 
-            {!!cart.length && (
+            {cart.length > 0 && (
               <button
                 type="button"
                 onClick={clearCart}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-4 text-sm font-black text-slate-700"
+                className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700"
               >
                 <X size={18} />
                 Limpar carrinho
@@ -803,7 +851,7 @@ export default function VendasPage() {
                     colSpan={6}
                     className="px-6 py-8 text-center text-slate-500"
                   >
-                    Nenhuma venda recente.
+                    Nenhuma venda registrada ainda.
                   </td>
                 </tr>
               )}
@@ -813,71 +861,97 @@ export default function VendasPage() {
       </section>
 
       {scannerOpen && (
-        <div className="fixed inset-0 z-50 bg-black/70 p-4">
-          <div className="mx-auto flex h-full max-w-xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-100 p-5">
-              <div>
-                <h2 className="text-xl font-black text-slate-950">
-                  Ler código
-                </h2>
+        <div className="fixed inset-0 z-50 bg-slate-950/80 p-4 backdrop-blur-sm">
+          <div className="mx-auto flex h-full max-w-xl flex-col justify-center">
+            <div className="overflow-hidden rounded-[2rem] bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 p-5">
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-wide text-slate-400">
+                    Scanner de venda
+                  </p>
 
-                <p className="text-sm text-slate-500">
-                  Aproxime e alinhe o código de barras.
-                </p>
-              </div>
-
-              <button
-                onClick={closeScanner}
-                className="rounded-2xl bg-slate-100 p-3 text-slate-700"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="flex-1 bg-black p-3">
-              <div
-                id={SCANNER_ELEMENT_ID}
-                className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950"
-              />
-            </div>
-
-            <div className="space-y-3 p-5">
-              {scannerMessage && (
-                <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
-                  {scannerMessage}
+                  <h2 className="text-2xl font-black text-slate-950">
+                    Ler produto
+                  </h2>
                 </div>
-              )}
 
-              {!scannerStarted && (
                 <button
                   type="button"
-                  onClick={startScanner}
-                  className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
+                  onClick={closeScanner}
+                  className="rounded-2xl bg-slate-100 p-3 text-slate-700"
                 >
-                  <RotateCcw size={18} />
-                  Tentar novamente
+                  <X size={20} />
                 </button>
-              )}
+              </div>
 
-              <button
-                type="button"
-                onClick={closeScanner}
-                className="flex w-full items-center justify-center rounded-2xl bg-slate-100 px-5 py-4 text-sm font-black text-slate-700"
-              >
-                Fechar scanner
-              </button>
+              <div className="bg-black p-3">
+                <div
+                  id={SCANNER_ELEMENT_ID}
+                  className="min-h-[360px] overflow-hidden rounded-[1.5rem] bg-slate-950 sm:min-h-[320px]"
+                />
+              </div>
+
+              <div className="space-y-3 p-5">
+                {scannerMessage && (
+                  <div className="rounded-2xl bg-emerald-50 p-4 text-sm font-bold text-emerald-700">
+                    {scannerMessage}
+                  </div>
+                )}
+
+                {!scannerStarted && (
+                  <button
+                    type="button"
+                    onClick={startScanner}
+                    className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white"
+                  >
+                    <RotateCcw size={18} />
+                    Tentar novamente
+                  </button>
+                )}
+
+                <p className="text-center text-xs font-semibold text-slate-400">
+                  Também é possível digitar o código manualmente no campo da
+                  tela de vendas.
+                </p>
+              </div>
             </div>
           </div>
         </div>
       )}
+    </div>
+  );
+}
 
-      <button
-        type="button"
-        onClick={loadData}
-        className="fixed bottom-24 right-4 z-30 rounded-2xl bg-white p-4 text-slate-950 shadow-lg xl:hidden"
+function TotalRow({
+  label,
+  value,
+  strong = false,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <p
+        className={
+          strong
+            ? "text-lg font-black text-slate-950"
+            : "text-sm font-bold text-slate-500"
+        }
       >
-        <RefreshCcw size={20} />
-      </button>
+        {label}
+      </p>
+
+      <p
+        className={
+          strong
+            ? "text-2xl font-black text-slate-950"
+            : "text-sm font-black text-slate-700"
+        }
+      >
+        {value}
+      </p>
     </div>
   );
 }
