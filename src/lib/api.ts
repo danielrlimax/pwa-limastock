@@ -48,6 +48,10 @@ function getErrorDetail(data: unknown, status: number) {
     return data.message;
   }
 
+  if (typeof data === "string") {
+    return data;
+  }
+
   return `Erro ao chamar API. Status: ${status}`;
 }
 
@@ -95,7 +99,11 @@ export async function apiFetch<T>(
     cache: "no-store",
   });
 
-  const data = await response.json().catch(() => null);
+  const contentType = response.headers.get("content-type") || "";
+
+  const data = contentType.includes("application/json")
+    ? await response.json().catch(() => null)
+    : await response.text().catch(() => null);
 
   if (response.status === 401 && retry) {
     const refreshed = await refreshSession();
