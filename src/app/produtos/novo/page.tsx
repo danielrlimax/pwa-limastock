@@ -1,14 +1,14 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { Suspense, FormEvent, useEffect, useRef, useState } from "react";
 import {
   Barcode,
   Camera,
-  CheckCircle2,
   Keyboard,
   PackagePlus,
   RotateCcw,
   Save,
+  Search,
   X,
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -20,6 +20,14 @@ type ProductCreateResponse = {
   id: string;
   name: string;
   barcode: string | null;
+};
+
+type Product = {
+  id: string;
+  name: string;
+  barcode: string | null;
+  sale_price: string;
+  current_stock: string;
 };
 
 const SCANNER_ELEMENT_ID = "limastock-create-product-scanner";
@@ -51,6 +59,20 @@ function normalizeMoney(value: string) {
 }
 
 export default function NovoProdutoPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-[2rem] bg-white p-8 shadow-sm">
+          <p className="text-slate-600">Carregando cadastro...</p>
+        </div>
+      }
+    >
+      <NovoProdutoContent />
+    </Suspense>
+  );
+}
+
+function NovoProdutoContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -73,7 +95,10 @@ export default function NovoProdutoPage() {
   const [scannerStarted, setScannerStarted] = useState(false);
   const [scannerMessage, setScannerMessage] = useState("");
 
+  const [checkingBarcode, setCheckingBarcode] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  const [existingProduct, setExistingProduct] = useState<Product | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
@@ -89,6 +114,49 @@ export default function NovoProdutoPage() {
     } finally {
       scannerRef.current = null;
       setScannerStarted(false);
+    }
+  }
+
+  async function findProductByBarcode(code: string) {
+    const cleanCode = onlyBarcodeChars(code);
+
+    if (!cleanCode) return null;
+
+    try {
+      const tenant = await getCurrentTenant();
+
+      const product = await apiFetch<Product>(
+        `/products/barcode/${encodeURIComponent(cleanCode)}?tenant_id=${tenant.id}`
+      );
+
+      return product;
+    } catch {
+      return null;
+    }
+  }
+
+  async function checkBarcodeExists(code = barcode) {
+    const cleanCode = onlyBarcodeChars(code);
+
+    if (!cleanCode) {
+      setExistingProduct(null);
+      return null;
+    }
+
+    try {
+      setCheckingBarcode(true);
+      setError("");
+      setExistingProduct(null);
+
+      const product = await findProductByBarcode(cleanCode);
+
+      if (product) {
+        setExistingProduct(product);
+      }
+
+      return product;
+    } finally {
+      setCheckingBarcode(false);
     }
   }
 
@@ -108,29 +176,10 @@ export default function NovoProdutoPage() {
       scannerRef.current = scanner;
       setScannerStarted(true);
 
-      const cameras = await Html5Qrcode.getCameras();
-
-      const backCamera =
-        cameras.find((camera) =>
-          camera.label.toLowerCase().includes("back")
-        ) ||
-        cameras.find((camera) =>
-          camera.label.toLowerCase().includes("traseira")
-        ) ||
-        cameras[cameras.length - 1];
-
-      const cameraConfig = backCamera
-        ? {
-            deviceId: {
-              exact: backCamera.id,
-            },
-          }
-        : {
-            facingMode: "environment",
-          };
-
       await scanner.start(
-        cameraConfig,
+        {
+          facingMode: "environment",
+        },
         {
           fps: 20,
           qrbox: {
@@ -139,15 +188,6 @@ export default function NovoProdutoPage() {
           },
           aspectRatio: 1.7777778,
           disableFlip: false,
-          videoConstraints: {
-            facingMode: "environment",
-            width: {
-              ideal: 1280,
-            },
-            height: {
-              ideal: 720,
-            },
-          },
         },
         async (decodedText) => {
           if (processingRef.current) return;
@@ -162,6 +202,7 @@ export default function NovoProdutoPage() {
           setScannerMessage(`Código lido: ${cleanCode}`);
 
           await stopScanner();
+          await checkBarcodeExists(cleanCode);
 
           window.setTimeout(() => {
             setScannerOpen(false);
@@ -216,6 +257,16 @@ export default function NovoProdutoPage() {
         throw new Error("Informe o preço de venda.");
       }
 
+      const cleanBarcode = onlyBarcodeChars(barcode);
+
+      if (cleanBarcode) {
+        const productFound = await checkBarcodeExists(cleanBarcode);
+
+        if (productFound) {
+          throw new Error("Já existe um produto cadastrado com este código.");
+        }
+      }
+
       const tenant = await getCurrentTenant();
 
       const response = await apiFetch<ProductCreateResponse>("/products", {
@@ -225,7 +276,7 @@ export default function NovoProdutoPage() {
           category_id: null,
           name: name.trim(),
           description: description.trim() || null,
-          barcode: onlyBarcodeChars(barcode) || null,
+          barcode: cleanBarcode || null,
           unit: unit.trim() || "un",
           cost_price: normalizeMoney(costPrice),
           sale_price: normalizeMoney(salePrice),
@@ -239,7 +290,7 @@ export default function NovoProdutoPage() {
 
       window.setTimeout(() => {
         router.push("/produtos");
-      }, 900);
+      }, 800);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erro ao cadastrar produto.");
     } finally {
@@ -267,12 +318,11 @@ export default function NovoProdutoPage() {
             </p>
 
             <h1 className="text-2xl font-black sm:text-3xl">
-              Cadastrar produto
+              Cadastrar produto por código
             </h1>
 
             <p className="mt-1 text-sm text-slate-300">
-              Cadastre o produto digitando o código ou usando a câmera como
-              apoio.
+              Digite o código de barras ou use a câmera para preencher o campo.
             </p>
           </div>
         </div>
@@ -290,6 +340,12 @@ export default function NovoProdutoPage() {
         </div>
       )}
 
+      {existingProduct && (
+        <div className="rounded-2xl border border-yellow-100 bg-yellow-50 p-4 text-sm font-bold text-yellow-800">
+          Já existe um produto com este código: {existingProduct.name}
+        </div>
+      )}
+
       <form
         onSubmit={handleCreateProduct}
         className="grid gap-6 xl:grid-cols-[1fr_420px]"
@@ -301,18 +357,10 @@ export default function NovoProdutoPage() {
             </h2>
 
             <p className="mt-1 text-sm text-slate-500">
-              O código de barras é opcional, mas ajuda muito no PDV e no
-              estoque.
+              O campo manual garante o cadastro mesmo quando a câmera não
+              consegue ler.
             </p>
           </div>
-
-          <Input
-            label="Nome do produto"
-            value={name}
-            onChange={setName}
-            placeholder="Ex: Coca-Cola 350ml"
-            required
-          />
 
           <div>
             <label className="text-sm font-bold text-slate-700">
@@ -328,12 +376,15 @@ export default function NovoProdutoPage() {
 
                 <input
                   value={barcode}
-                  onChange={(event) =>
-                    setBarcode(onlyBarcodeChars(event.target.value))
-                  }
+                  onChange={(event) => {
+                    const value = onlyBarcodeChars(event.target.value);
+                    setBarcode(value);
+                    setExistingProduct(null);
+                  }}
+                  onBlur={() => checkBarcodeExists()}
                   inputMode="numeric"
                   autoComplete="off"
-                  placeholder="Digite ou leia o código"
+                  placeholder="Digite os números do código"
                   className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-4 font-mono text-sm font-bold outline-none focus:border-slate-950 focus:bg-white"
                 />
               </div>
@@ -346,14 +397,31 @@ export default function NovoProdutoPage() {
                 <Camera size={18} />
                 Usar câmera
               </button>
+
+              <button
+                type="button"
+                onClick={() => checkBarcodeExists()}
+                disabled={checkingBarcode || !barcode}
+                className="flex items-center justify-center gap-2 rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700 disabled:opacity-60"
+              >
+                <Search size={18} />
+                {checkingBarcode ? "Verificando..." : "Verificar"}
+              </button>
             </div>
 
             <p className="mt-2 text-xs font-semibold text-slate-400">
-              Para garantir o cadastro, você pode digitar os números impressos
-              abaixo do código. Leitores USB/Bluetooth também funcionam nesse
-              campo.
+              Para garantir resultado, digite os números impressos abaixo do
+              código. Leitores Bluetooth/USB também funcionam nesse campo.
             </p>
           </div>
+
+          <Input
+            label="Nome do produto"
+            value={name}
+            onChange={setName}
+            placeholder="Ex: Coca-Cola 350ml"
+            required
+          />
 
           <Textarea
             label="Descrição"
@@ -441,7 +509,7 @@ export default function NovoProdutoPage() {
 
           <button
             type="submit"
-            disabled={saving}
+            disabled={saving || !!existingProduct}
             className="flex w-full items-center justify-center gap-2 rounded-2xl bg-slate-950 px-5 py-4 text-sm font-black text-white disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Save size={18} />

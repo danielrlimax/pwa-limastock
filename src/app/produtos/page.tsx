@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import {
+  Barcode,
   CheckCircle2,
   FolderPlus,
   Package,
@@ -333,19 +335,34 @@ export default function ProdutosPage() {
             </div>
           </div>
 
-          {tenant && (
-            <div className="rounded-3xl border border-white/10 bg-white/10 px-5 py-4">
-              <p className="text-sm text-slate-300">Estabelecimento</p>
-              <p className="font-bold">{tenant.name}</p>
-            </div>
-          )}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Link
+              href="/produtos/novo"
+              prefetch
+              className="flex items-center justify-center gap-2 rounded-2xl bg-white px-5 py-4 text-sm font-black text-slate-950 transition hover:bg-slate-100 active:scale-95"
+            >
+              <Barcode size={18} />
+              Cadastrar por código
+            </Link>
+
+            {tenant && (
+              <div className="rounded-3xl border border-white/10 bg-white/10 px-5 py-4">
+                <p className="text-sm text-slate-300">Estabelecimento</p>
+                <p className="font-bold">{tenant.name}</p>
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
       <section className="grid gap-4 md:grid-cols-4">
         <MetricCard label="Produtos cadastrados" value={totalProducts} />
         <MetricCard label="Produtos ativos" value={activeProducts} />
-        <MetricCard label="Estoque baixo" value={lowStockProducts} alert={lowStockProducts > 0} />
+        <MetricCard
+          label="Estoque baixo"
+          value={lowStockProducts}
+          alert={lowStockProducts > 0}
+        />
         <MetricCard label="Categorias ativas" value={activeCategories.length} />
       </section>
 
@@ -401,7 +418,8 @@ export default function ProdutosPage() {
                   {editingProduct ? "Editar produto" : "Novo produto"}
                 </h2>
                 <p className="text-sm text-slate-500">
-                  Os dados serão enviados para a API.
+                  Cadastro rápido manual. Para fluxo com código, use o botão do
+                  topo.
                 </p>
               </div>
             </div>
@@ -826,9 +844,7 @@ function CategoriesTable({
           </div>
 
           <div>
-            <h2 className="text-xl font-black text-slate-950">
-              Categorias
-            </h2>
+            <h2 className="text-xl font-black text-slate-950">Categorias</h2>
             <p className="mt-1 text-sm text-slate-500">
               Organize os produtos do estabelecimento.
             </p>
