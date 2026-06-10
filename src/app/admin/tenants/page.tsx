@@ -82,7 +82,9 @@ export default function AdminTenantsPage() {
       setTenants(data);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Erro ao carregar estabelecimentos."
+        err instanceof Error
+          ? err.message
+          : "Erro ao carregar estabelecimentos."
       );
     } finally {
       setLoading(false);
@@ -99,6 +101,10 @@ export default function AdminTenantsPage() {
       setSuccess("");
 
       const finalSlug = slugify(slug || generatedSlug || name);
+
+      if (!name.trim()) {
+        throw new Error("Informe o nome do estabelecimento.");
+      }
 
       if (!finalSlug) {
         throw new Error("Informe um nome válido para gerar o slug.");
