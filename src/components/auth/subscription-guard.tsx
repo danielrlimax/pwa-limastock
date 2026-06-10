@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   getCachedSubscription,
   getCurrentSubscription,
+  hasSubscriptionCache,
   SubscriptionStatus,
 } from "@/lib/subscription";
 import { SubscriptionBlockedCard } from "@/components/billing/subscription-blocked-card";
@@ -15,7 +16,7 @@ export function SubscriptionGuard({
 }) {
   const cachedSubscription = getCachedSubscription();
 
-  const [checking, setChecking] = useState(!cachedSubscription);
+  const [checking, setChecking] = useState(!hasSubscriptionCache());
   const [subscription, setSubscription] =
     useState<SubscriptionStatus | null>(cachedSubscription);
   const [message, setMessage] = useState("");
@@ -51,14 +52,27 @@ export function SubscriptionGuard({
       }
     }
 
-    if (!cachedSubscription) {
-      checkSubscription();
+    if (hasSubscriptionCache()) {
+      const cached = getCachedSubscription();
+
+      setSubscription(cached);
+      setChecking(false);
+
+      if (cached && !cached.is_active) {
+        setMessage(
+          "Regularize a assinatura do estabelecimento para continuar usando produtos, estoque, vendas e dashboard."
+        );
+      }
+
+      return;
     }
+
+    checkSubscription();
 
     return () => {
       cancelled = true;
     };
-  }, [cachedSubscription]);
+  }, []);
 
   if (checking) {
     return (

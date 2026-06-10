@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import {
   getCachedTenant,
   getCurrentTenant,
+  hasTenantCache,
   Tenant,
 } from "@/lib/tenant";
 import { NoTenantCard } from "@/components/business/no-tenant-card";
@@ -11,7 +12,7 @@ import { NoTenantCard } from "@/components/business/no-tenant-card";
 export function TenantGuard({ children }: { children: React.ReactNode }) {
   const cachedTenant = getCachedTenant();
 
-  const [checking, setChecking] = useState(!cachedTenant);
+  const [checking, setChecking] = useState(!hasTenantCache());
   const [tenant, setTenant] = useState<Tenant | null>(cachedTenant);
   const [error, setError] = useState("");
 
@@ -40,14 +41,18 @@ export function TenantGuard({ children }: { children: React.ReactNode }) {
       }
     }
 
-    if (!cachedTenant) {
-      loadTenant();
+    if (hasTenantCache()) {
+      setTenant(getCachedTenant());
+      setChecking(false);
+      return;
     }
+
+    loadTenant();
 
     return () => {
       cancelled = true;
     };
-  }, [cachedTenant]);
+  }, []);
 
   if (checking) {
     return (

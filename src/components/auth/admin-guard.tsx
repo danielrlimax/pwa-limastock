@@ -3,42 +3,73 @@
 import { useEffect, useState } from "react";
 import { ShieldAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
-
-type AdminMeResponse = {
-  is_admin: boolean;
-  email: string | null;
-};
+import {
+  getAdminStatusCached,
+  getCachedAdmin,
+  hasAdminCache,
+} from "@/lib/session";
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
-  const [allowed, setAllowed] = useState(false);
-  const [checking, setChecking] = useState(true);
+  const cachedAdmin = getCachedAdmin();
+
+  const [allowed, setAllowed] = useState(
+    hasAdminCache() && cachedAdmin?.is_admin === true
+  );
+  const [checking, setChecking] = useState(
+    !(hasAdminCache() && cachedAdmin?.is_admin === true)
+  );
   const [forbidden, setForbidden] = useState(false);
 
   useEffect(() => {
+    let cancelled = false;
+
     async function checkAdmin() {
       try {
-        const data = await apiFetch<AdminMeResponse>("/admin/me");
+        const data = await getAdminStatusCached();
+
+        if (cancelled) return;
 
         if (!data.is_admin) {
           setForbidden(true);
-          setTimeout(() => router.replace("/dashboard"), 1000);
+          setChecking(false);
+
+          window.setTimeout(() => {
+            router.replace("/dashboard");
+          }, 700);
+
           return;
         }
 
         setAllowed(true);
       } catch {
+        if (cancelled) return;
+
         setForbidden(true);
-        setTimeout(() => router.replace("/dashboard"), 1000);
+
+        window.setTimeout(() => {
+          router.replace("/dashboard");
+        }, 700);
       } finally {
-        setChecking(false);
+        if (!cancelled) {
+          setChecking(false);
+        }
       }
     }
 
+    if (hasAdminCache() && cachedAdmin?.is_admin === true) {
+      setAllowed(true);
+      setChecking(false);
+      return;
+    }
+
     checkAdmin();
-  }, [router]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, cachedAdmin?.is_admin]);
 
   if (forbidden) {
     return (
@@ -52,6 +83,7 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
             <p className="text-sm font-semibold uppercase tracking-wide text-red-600">
               Acesso bloqueado
             </p>
+
             <h1 className="text-2xl font-bold text-red-950">
               Você não tem permissão para acessar o painel admin.
             </h1>

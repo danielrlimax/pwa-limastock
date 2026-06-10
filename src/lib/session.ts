@@ -16,8 +16,24 @@ let cachedAdmin: AdminMeResponse | null = null;
 let authWasChecked = false;
 let adminWasChecked = false;
 
+let authPromise: Promise<MeResponse> | null = null;
+let adminPromise: Promise<AdminMeResponse> | null = null;
+
+const CACHE_TIME_MS = 5 * 60 * 1000;
+
+let authCheckedAt = 0;
+let adminCheckedAt = 0;
+
+function isFresh(timestamp: number) {
+  return Date.now() - timestamp < CACHE_TIME_MS;
+}
+
 export function hasAuthCache() {
-  return authWasChecked && cachedUser !== null;
+  return authWasChecked && cachedUser !== null && isFresh(authCheckedAt);
+}
+
+export function hasAdminCache() {
+  return adminWasChecked && cachedAdmin !== null && isFresh(adminCheckedAt);
 }
 
 export function getCachedUser() {
@@ -29,34 +45,63 @@ export function getCachedAdmin() {
 }
 
 export async function getCurrentUserCached(force = false) {
-  if (!force && cachedUser) {
+  if (!force && cachedUser && isFresh(authCheckedAt)) {
     return cachedUser;
   }
 
-  const user = await apiFetch<MeResponse>("/auth/me");
+  if (!force && authPromise) {
+    return authPromise;
+  }
 
-  cachedUser = user;
-  authWasChecked = true;
+  authPromise = apiFetch<MeResponse>("/auth/me")
+    .then((user) => {
+      cachedUser = user;
+      authWasChecked = true;
+      authCheckedAt = Date.now();
 
-  return user;
+      return user;
+    })
+    .finally(() => {
+      authPromise = null;
+    });
+
+  return authPromise;
 }
 
 export async function getAdminStatusCached(force = false) {
-  if (!force && cachedAdmin) {
+  if (!force && cachedAdmin && isFresh(adminCheckedAt)) {
     return cachedAdmin;
   }
 
-  const admin = await apiFetch<AdminMeResponse>("/admin/me");
+  if (!force && adminPromise) {
+    return adminPromise;
+  }
 
-  cachedAdmin = admin;
-  adminWasChecked = true;
+  adminPromise = apiFetch<AdminMeResponse>("/admin/me")
+    .then((admin) => {
+      cachedAdmin = admin;
+      adminWasChecked = true;
+      adminCheckedAt = Date.now();
 
-  return admin;
+      return admin;
+    })
+    .finally(() => {
+      adminPromise = null;
+    });
+
+  return adminPromise;
 }
 
 export function clearSessionCache() {
   cachedUser = null;
   cachedAdmin = null;
+
+  authPromise = null;
+  adminPromise = null;
+
   authWasChecked = false;
   adminWasChecked = false;
+
+  authCheckedAt = 0;
+  adminCheckedAt = 0;
 }

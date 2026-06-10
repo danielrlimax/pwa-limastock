@@ -40,6 +40,18 @@ export type PlanUsage = {
 let cachedSubscription: SubscriptionStatus | null = null;
 let cachedPlanUsage: PlanUsage | null = null;
 
+let subscriptionPromise: Promise<SubscriptionStatus> | null = null;
+let planUsagePromise: Promise<PlanUsage> | null = null;
+
+const CACHE_TIME_MS = 5 * 60 * 1000;
+
+let subscriptionCheckedAt = 0;
+let planUsageCheckedAt = 0;
+
+function isFresh(timestamp: number) {
+  return Date.now() - timestamp < CACHE_TIME_MS;
+}
+
 export function getCachedSubscription() {
   return cachedSubscription;
 }
@@ -48,39 +60,71 @@ export function getCachedPlanUsage() {
   return cachedPlanUsage;
 }
 
+export function hasSubscriptionCache() {
+  return cachedSubscription !== null && isFresh(subscriptionCheckedAt);
+}
+
 export async function getCurrentSubscription(force = false) {
-  if (!force && cachedSubscription) {
+  if (!force && cachedSubscription && isFresh(subscriptionCheckedAt)) {
     return cachedSubscription;
   }
 
-  const tenant = await getCurrentTenant();
+  if (!force && subscriptionPromise) {
+    return subscriptionPromise;
+  }
 
-  const subscription = await apiFetch<SubscriptionStatus>(
-    `/subscriptions/status?tenant_id=${tenant.id}`
-  );
+  subscriptionPromise = getCurrentTenant()
+    .then((tenant) =>
+      apiFetch<SubscriptionStatus>(
+        `/subscriptions/status?tenant_id=${tenant.id}`
+      )
+    )
+    .then((subscription) => {
+      cachedSubscription = subscription;
+      subscriptionCheckedAt = Date.now();
 
-  cachedSubscription = subscription;
+      return subscription;
+    })
+    .finally(() => {
+      subscriptionPromise = null;
+    });
 
-  return subscription;
+  return subscriptionPromise;
 }
 
 export async function getCurrentPlanUsage(force = false) {
-  if (!force && cachedPlanUsage) {
+  if (!force && cachedPlanUsage && isFresh(planUsageCheckedAt)) {
     return cachedPlanUsage;
   }
 
-  const tenant = await getCurrentTenant();
+  if (!force && planUsagePromise) {
+    return planUsagePromise;
+  }
 
-  const usage = await apiFetch<PlanUsage>(
-    `/subscriptions/usage?tenant_id=${tenant.id}`
-  );
+  planUsagePromise = getCurrentTenant()
+    .then((tenant) =>
+      apiFetch<PlanUsage>(`/subscriptions/usage?tenant_id=${tenant.id}`)
+    )
+    .then((usage) => {
+      cachedPlanUsage = usage;
+      planUsageCheckedAt = Date.now();
 
-  cachedPlanUsage = usage;
+      return usage;
+    })
+    .finally(() => {
+      planUsagePromise = null;
+    });
 
-  return usage;
+  return planUsagePromise;
 }
 
 export function clearSubscriptionCache() {
   cachedSubscription = null;
   cachedPlanUsage = null;
+
+  subscriptionPromise = null;
+  planUsagePromise = null;
+
+  subscriptionCheckedAt = 0;
+  planUsageCheckedAt = 0;
 }
